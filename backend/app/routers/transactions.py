@@ -1,0 +1,139 @@
+from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from app.auth import get_current_user
+from app.database import get_async_db
+
+router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+
+
+class TransactionUpdate(BaseModel):
+    category: Optional[str] = None
+    note: Optional[str] = None
+    direction: Optional[str] = None
+
+
+@router.get("")
+async def list_transactions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    platform: Optional[str] = None,
+    direction: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    user: dict = Depends(get_current_user),
+):
+    db = await get_async_db()
+    try:
+        conditions = ["user_id = ?"]
+        params = [user["id"]]
+
+        if platform:
+            conditions.append("platform = ?")
+            params.append(platform)
+        if direction:
+            conditions.append("direction = ?")
+            params.append(direction)
+        if category:
+            conditions.append("category = ?")
+            params.append(category)
+        if search:
+            conditions.append("(counterparty LIKE ? OR note LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        if start_date:
+            conditions.append("tx_time >= ?")
+            params.append(start_date)
+        if end_date:
+            conditions.append("tx_time <= ?")
+            params.append(end_date)
+        if min_amount is not None:
+            conditions.append("amount >= ?")
+            params.append(min_amount)
+        if max_amount is not None:
+            conditions.append("amount <= ?")
+            params.append(max_amount)
+
+        where = " AND ".join(conditions)
+
+        # Count
+        cursor = await db.execute(f"SELECT COUNT(*) as cnt FROM transactions WHERE {where}", params)
+        total = (await cursor.fetchone())["cnt"]
+
+        # Data
+        offset = (page - 1) * page_size
+        cursor = await db.execute(
+            f"""SELECT id, tx_id, tx_time, platform, account, direction, amount,
+                       category, original_category, counterparty, note, source, created_at
+                FROM transactions WHERE {where}
+                ORDER BY tx_time DESC LIMIT ? OFFSET ?""",
+            params + [page_size, offset],
+        )
+        rows = [dict(r) for r in await cursor.fetchall()]
+
+        return {
+            "items": rows,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+        }
+    finally:
+        await db.close()
+
+
+@router.get("/{tx_id}")
+async def get_transaction(tx_id: int, user: dict = Depends(get_current_user)):
+    db = await get_async_db()
+    try:
+        cursor = await db.execute(
+            "SELECT * FROM transactions WHERE id = ? AND user_id = ?", (tx_id, user["id"])
+        )
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="交易记录不存在")
+        return dict(row)
+    finally:
+        await db.close()
+
+
+@router.patch("/{tx_id}")
+async def update_transaction(tx_id: int, req: TransactionUpdate, user: dict = Depends(get_current_user)):
+    db = await get_async_db()
+    try:
+        updates = []
+        params = []
+        for field, value in req.model_dump(exclude_none=True).items():
+            updates.append(f"{field} = ?")
+            params.append(value)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="没有要更新的字段")
+
+        params.extend([tx_id, user["id"]])
+        await db.execute(
+            f"UPDATE transactions SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
+            params,
+        )
+        await db.commit()
+        return {"message": "更新成功"}
+    finally:
+        await db.close()
+
+
+@router.delete("/{tx_id}")
+async def delete_transaction(tx_id: int, user: dict = Depends(get_current_user)):
+    db = await get_async_db()
+    try:
+        cursor = await db.execute(
+            "DELETE FROM transactions WHERE id = ? AND user_id = ?", (tx_id, user["id"])
+        )
+        await db.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="交易记录不存在")
+        return {"message": "删除成功"}
+    finally:
+        await db.close()

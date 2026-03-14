@@ -1,0 +1,10 @@
+# FinPad
+node_modules/
+.next/
+__pycache__/
+*.pyc
+venv/
+data/
+.env
+.env.local
+*.db
