@@ -6,6 +6,7 @@ import { api, getToken } from "@/lib/api";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import ReactMarkdown from "react-markdown";
 import {
   Card,
   CardContent,
@@ -147,8 +148,8 @@ export default function ReportsPage() {
                 <CardTitle className="text-base">🤖 AI 分析</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                  {detail.ai_analysis}
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown>{detail.ai_analysis}</ReactMarkdown>
                 </div>
               </CardContent>
             </Card>
