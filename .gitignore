@@ -1,10 +1,22 @@
-# FinPad
-node_modules/
-.next/
+# Python
 __pycache__/
 *.pyc
 venv/
-data/
 .env
-.env.local
-*.db
+
+# Node
+node_modules/
+.next/
+frontend/node_modules/
+frontend/.next/
+
+# Data
+data/*.db
+data/raw/
+data/sync_state.json
+
+# OS
+.DS_Store
+*.swp
+
+# Test results (keep in git for now)
