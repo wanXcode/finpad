@@ -83,7 +83,6 @@ async def delete_source(source_id: int, user: dict = Depends(get_current_user)):
 
 @router.post("/{source_id}/sync")
 async def trigger_sync(source_id: int, user: dict = Depends(get_current_user)):
-    # TODO: implement actual sync logic
     db = await get_async_db()
     try:
         cursor = await db.execute(
@@ -92,7 +91,23 @@ async def trigger_sync(source_id: int, user: dict = Depends(get_current_user)):
         source = await cursor.fetchone()
         if not source:
             raise HTTPException(status_code=404, detail="数据源不存在")
-        return {"message": f"同步任务已触发: {source['name']}", "status": "queued"}
+
+        source = dict(source)
+        src_type = source.get("type", "")
+        config_json = source.get("config_json", "")
+
+        if src_type == "email_imap" and config_json:
+            import json as _json
+            from app.sync_engine import sync_from_email
+            config = _json.loads(config_json)
+            config["platform"] = source.get("platform", "alipay")
+            try:
+                result = sync_from_email(config, data_source_id=source_id)
+                return {"message": f"同步完成: {source['name']}", "status": "success", "result": result}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
+        else:
+            return {"message": f"同步任务已触发: {source['name']}", "status": "queued"}
     finally:
         await db.close()
 
