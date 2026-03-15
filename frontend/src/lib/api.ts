@@ -1,4 +1,5 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+// In production, API calls go through Next.js proxy route to avoid CORS/firewall issues
+const API_BASE = "";
 
 type RequestOptions = {
   method?: string;
@@ -15,7 +16,7 @@ export async function api<T = unknown>(
   const token =
     typeof window !== "undefined" ? localStorage.getItem("finpad_token") : null;
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${API_BASE}/api/proxy${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",

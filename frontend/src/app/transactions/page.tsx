@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, getToken } from "@/lib/api";
+import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -76,17 +77,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-background/95 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-xl font-bold cursor-pointer" onClick={() => router.push("/")}>FinPad</h1>
-          <nav className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => router.push("/")}>总览</Button>
-            <Button variant="default" size="sm">交易</Button>
-            <Button variant="ghost" size="sm" onClick={() => router.push("/sources")}>数据源</Button>
-            <Button variant="ghost" size="sm" onClick={() => router.push("/settings")}>设置</Button>
-          </nav>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-4">
         {/* Filters */}

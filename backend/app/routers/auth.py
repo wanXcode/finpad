@@ -37,7 +37,7 @@ async def login(req: LoginRequest):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="用户名或密码错误",
             )
-        token = create_access_token({"sub": user["id"]})
+        token = create_access_token({"sub": str(user["id"])})
         return LoginResponse(
             access_token=token,
             user={"id": user["id"], "username": user["username"], "display_name": user["display_name"]},

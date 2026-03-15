@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, getToken, clearToken } from "@/lib/api";
+import { api, getToken } from "@/lib/api";
+import { AppHeader } from "@/components/app-header";
 import {
   Card,
   CardContent,
@@ -11,7 +12,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 
 type Summary = {
   total_assets: number;
@@ -104,37 +104,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-xl font-bold">FinPad</h1>
-          <nav className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => router.push("/")}>
-              总览
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => router.push("/transactions")}>
-              交易
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => router.push("/sources")}>
-              数据源
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => router.push("/settings")}>
-              设置
-            </Button>
-            <Separator orientation="vertical" className="h-6" />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                clearToken();
-                router.push("/login");
-              }}
-            >
-              退出
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* KPI Cards */}
