@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: ./backend
+    container_name: finpad-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_API_BASE=${AI_API_BASE:-https://api.5666.net/v1}
+      - AI_MODEL=${AI_MODEL:-gpt-4o}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    container_name: finpad-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - API_BACKEND=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
