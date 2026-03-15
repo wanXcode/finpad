@@ -105,7 +105,7 @@ async def trigger_sync(source_id: int, user: dict = Depends(get_current_user)):
                 result = sync_from_email(config, data_source_id=source_id)
                 return {"message": f"同步完成: {source['name']}", "status": "success", "result": result}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
+                return {"message": f"同步失败: {str(e)[:200]}", "status": "error", "error": str(e)[:500]}
         else:
             return {"message": f"同步任务已触发: {source['name']}", "status": "queued"}
     finally:
