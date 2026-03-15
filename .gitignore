@@ -20,3 +20,4 @@ data/sync_state.json
 *.swp
 
 # Test results (keep in git for now)
+backend/data/
