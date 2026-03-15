@@ -34,8 +34,12 @@ async def list_transactions(
     search: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     min_amount: Optional[float] = None,
     max_amount: Optional[float] = None,
+    amount_min: Optional[float] = None,
+    amount_max: Optional[float] = None,
     user: dict = Depends(get_current_user),
 ):
     db = await get_async_db()
@@ -55,18 +59,22 @@ async def list_transactions(
         if search:
             conditions.append("(counterparty LIKE ? OR note LIKE ?)")
             params.extend([f"%{search}%", f"%{search}%"])
-        if start_date:
+        effective_start = start_date or date_from
+        effective_end = end_date or date_to
+        effective_min = min_amount if min_amount is not None else amount_min
+        effective_max = max_amount if max_amount is not None else amount_max
+        if effective_start:
             conditions.append("tx_time >= ?")
-            params.append(start_date)
-        if end_date:
+            params.append(effective_start)
+        if effective_end:
             conditions.append("tx_time <= ?")
-            params.append(end_date)
-        if min_amount is not None:
+            params.append(effective_end + " 23:59:59" if len(effective_end) == 10 else effective_end)
+        if effective_min is not None:
             conditions.append("amount >= ?")
-            params.append(min_amount)
-        if max_amount is not None:
+            params.append(effective_min)
+        if effective_max is not None:
             conditions.append("amount <= ?")
-            params.append(max_amount)
+            params.append(effective_max)
 
         where = " AND ".join(conditions)
 

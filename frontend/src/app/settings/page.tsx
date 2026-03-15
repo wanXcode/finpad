@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, getToken } from "@/lib/api";
-import { AppHeader } from "@/components/app-header";
+import { AppLayout } from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -142,16 +142,15 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <AppHeader />
+        
         <main className="max-w-4xl mx-auto px-4 py-12 text-center text-muted-foreground">加载中...</main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <AppLayout title="设置">
+      
         <h2 className="text-xl font-bold">设置</h2>
 
         <Tabs defaultValue="profile">
@@ -297,7 +296,6 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
         </Tabs>
-      </main>
-    </div>
+      </AppLayout>
   );
 }

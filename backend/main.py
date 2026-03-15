@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db, get_async_db
 from app.auth import hash_password
-from app.routers import auth, dashboard, transactions, accounts, sources, categories, reports
+from app.routers import auth, dashboard, transactions, accounts, sources, categories, reports, imports, budgets
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -29,6 +29,8 @@ app.include_router(accounts.router)
 app.include_router(sources.router)
 app.include_router(categories.router)
 app.include_router(reports.router)
+app.include_router(imports.router)
+app.include_router(budgets.router)
 
 
 @app.on_event("startup")

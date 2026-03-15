@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, getToken } from "@/lib/api";
-import { AppHeader } from "@/components/app-header";
+import { AppLayout } from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -154,9 +154,7 @@ export default function SourcesPage() {
   const platformInfo = (key: string) => PLATFORM_OPTIONS.find((p) => p.value === key);
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader />
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <AppLayout title="数据源管理">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold">数据源管理</h2>
@@ -302,7 +300,6 @@ export default function SourcesPage() {
             )}
           </DialogContent>
         </Dialog>
-      </main>
-    </div>
+      </AppLayout>
   );
 }

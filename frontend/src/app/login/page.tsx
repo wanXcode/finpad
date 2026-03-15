@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, setToken } from "@/lib/api";
+import { api } from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Wallet, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,22 +23,25 @@ export default function LoginPage() {
     try {
       const res = await api<{ access_token: string }>("/api/auth/login", {
         method: "POST",
-        body: { username, password },
+        body: JSON.stringify({ username, password }),
       });
-      setToken(res.access_token);
+      localStorage.setItem("token", res.access_token);
       router.push("/");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "登录失败");
+    } catch {
+      setError("用户名或密码错误");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">FinPad</CardTitle>
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mx-auto">
+            <Wallet className="w-6 h-6 text-primary-foreground" />
+          </div>
+          <CardTitle className="text-xl">FinPad</CardTitle>
           <CardDescription>个人财务控制台</CardDescription>
         </CardHeader>
         <CardContent>
@@ -49,7 +53,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="请输入用户名"
-                required
+                autoFocus
               />
             </div>
             <div className="space-y-2">
@@ -60,14 +64,14 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码"
-                required
               />
             </div>
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-red-500 text-center">{error}</p>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "登录中..." : "登录"}
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              登录
             </Button>
           </form>
         </CardContent>

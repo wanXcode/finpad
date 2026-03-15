@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, getToken } from "@/lib/api";
-import { AppHeader } from "@/components/app-header";
+import { AppLayout } from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ReactMarkdown from "react-markdown";
@@ -161,9 +161,9 @@ export default function ReportsPage() {
 
   if (detail) {
     return (
-      <div className="min-h-screen bg-background">
-        <AppHeader />
-        <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      <AppLayout title="分析报告">
+        
+        
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="sm" onClick={() => setDetail(null)}>← 返回</Button>
@@ -207,15 +207,14 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
           )}
-        </main>
-      </div>
+        </AppLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <AppLayout title="分析报告">
+      
+      
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold">财务报告</h2>
@@ -269,7 +268,6 @@ export default function ReportsPage() {
             ))}
           </div>
         )}
-      </main>
-    </div>
+      </AppLayout>
   );
 }
