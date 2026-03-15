@@ -13,6 +13,17 @@ class TransactionUpdate(BaseModel):
     direction: Optional[str] = None
 
 
+class TransactionCreate(BaseModel):
+    tx_time: str
+    platform: str = ""
+    account: str = ""
+    direction: str = "支出"
+    amount: float = 0
+    category: str = "其他"
+    counterparty: str = ""
+    note: str = ""
+
+
 @router.get("")
 async def list_transactions(
     page: int = Query(1, ge=1),
@@ -85,6 +96,26 @@ async def list_transactions(
         await db.close()
 
 
+@router.post("")
+async def create_transaction(req: TransactionCreate, user: dict = Depends(get_current_user)):
+    import hashlib
+    from datetime import datetime
+    db = await get_async_db()
+    try:
+        tx_id = f"manual_{hashlib.sha1(f'{req.tx_time}|{req.amount}|{req.counterparty}|{datetime.utcnow().isoformat()}'.encode()).hexdigest()[:16]}"
+        cursor = await db.execute(
+            """INSERT INTO transactions
+               (user_id, tx_id, tx_time, platform, account, direction, amount, category, original_category, counterparty, note, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
+            (user["id"], tx_id, req.tx_time, req.platform, req.account, req.direction,
+             req.amount, req.category, req.category, req.counterparty, req.note),
+        )
+        await db.commit()
+        return {"id": cursor.lastrowid, "tx_id": tx_id, "message": "交易创建成功"}
+    finally:
+        await db.close()
+
+
 @router.get("/{tx_id}")
 async def get_transaction(tx_id: int, user: dict = Depends(get_current_user)):
     db = await get_async_db()
@@ -114,11 +145,13 @@ async def update_transaction(tx_id: int, req: TransactionUpdate, user: dict = De
             raise HTTPException(status_code=400, detail="没有要更新的字段")
 
         params.extend([tx_id, user["id"]])
-        await db.execute(
+        cursor = await db.execute(
             f"UPDATE transactions SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
             params,
         )
         await db.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="交易记录不存在")
         return {"message": "更新成功"}
     finally:
         await db.close()
