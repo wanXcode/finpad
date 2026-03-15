@@ -7,40 +7,16 @@ import httpx
 from app.config import settings
 
 
-SYSTEM_PROMPT = """你是一个专业的个人财务分析师。用户会给你一个月的收支数据，请你生成一份详细的月度财务分析报告。
+SYSTEM_PROMPT = """你是个人财务分析师。基于用户的月度收支数据，生成简洁的中文分析报告（Markdown 格式）。
 
-报告要求：
-1. 用中文撰写，语气专业但友好
-2. 使用 Markdown 格式
-3. 包含以下板块：
+报告板块：
+1. **📊 收支总览** — 总收入/支出/净结余，与上月对比
+2. **🏷️ 支出分类 TOP5** — 前五大支出分类占比
+3. **⚠️ 异常提醒** — 大额消费、异常交易（无则跳过）
+4. **💡 建议** — 2-3 条实用建议
+5. **📈 健康评分** — 1-100 分
 
-## 📊 收支总览
-- 总收入、总支出、净结余
-- 与上月对比（如有数据）
-
-## 🏷️ 支出分类分析
-- 各分类占比排名
-- 哪些分类支出偏高或偏低
-- 值得关注的消费趋势
-
-## ⚠️ 异常消费提醒
-- 大额消费（单笔超过日均支出 3 倍的）
-- 非常规支出
-- 重复扣费或可疑交易
-
-## 💡 优化建议
-- 可以节省的地方
-- 消费结构是否健康
-- 下月预算建议
-
-## 📈 财务健康评分
-给出 1-100 的健康评分，并解释原因。
-
-注意：
-- 数据中 "不计收支" 的交易（如内部转账、退款）不要计入收支统计
-- 金额单位是人民币（元）
-- 分析要基于实际数据，不要编造数字
-"""
+要求：基于实际数据，不编造数字。忽略"不计收支"的交易。简洁为主，控制在 800 字以内。"""
 
 
 async def generate_analysis(raw_data: dict, prev_month_data: dict | None = None) -> str:
@@ -57,7 +33,7 @@ async def generate_analysis(raw_data: dict, prev_month_data: dict | None = None)
         user_content += f"\n\n上月数据（供对比）：\n```json\n{json.dumps(prev_month_data, ensure_ascii=False, indent=2)}\n```"
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{settings.AI_API_BASE}/chat/completions",
                 headers={
@@ -71,15 +47,19 @@ async def generate_analysis(raw_data: dict, prev_month_data: dict | None = None)
                         {"role": "user", "content": user_content},
                     ],
                     "temperature": 0.7,
-                    "max_tokens": 2000,
+                    "max_tokens": 1000,
                 },
             )
             resp.raise_for_status()
             data = resp.json()
             return data["choices"][0]["message"]["content"]
     except Exception as e:
+        import traceback
+        err_detail = f"{type(e).__name__}: {e}"
+        print(f"[FinPad AI] Error: {err_detail}")
+        traceback.print_exc()
         # Fallback to local analysis on API failure
-        return _generate_local_analysis(raw_data) + f"\n\n> ⚠️ AI 分析暂不可用（{str(e)[:100]}），以上为自动生成的基础分析。"
+        return _generate_local_analysis(raw_data) + f"\n\n> ⚠️ AI 分析暂不可用（{err_detail[:200]}），以上为自动生成的基础分析。"
 
 
 def _generate_local_analysis(raw_data: dict) -> str:
