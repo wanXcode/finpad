@@ -27,12 +27,31 @@ type ReportDetail = Report & {
   ai_analysis: string | null;
 };
 
+function getMonthOptions(): { value: string; label: string }[] {
+  const options = [];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = `${d.getFullYear()} 年 ${d.getMonth() + 1} 月`;
+    options.push({ value, label });
+  }
+  return options;
+}
+
 export default function ReportsPage() {
   const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [detail, setDetail] = useState<ReportDetail | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [regenerating, setRegenerating] = useState(false);
+
+  const monthOptions = getMonthOptions();
 
   const fetchReports = async () => {
     try {
@@ -51,16 +70,34 @@ export default function ReportsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (period?: string) => {
+    const p = period || selectedPeriod;
     setGenerating(true);
     try {
-      const res = await api<{ message: string }>("/api/reports/generate", { method: "POST" });
+      const res = await api<{ message: string }>(`/api/reports/generate?period=${p}`, { method: "POST" });
       alert(res.message);
       fetchReports();
     } catch (e) {
       alert(e instanceof Error ? e.message : "生成失败");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!detail) return;
+    setRegenerating(true);
+    try {
+      const res = await api<{ message: string; report_id: number }>(`/api/reports/generate?period=${detail.period}`, { method: "POST" });
+      alert(res.message);
+      // Reload the detail
+      const updated = await api<ReportDetail>(`/api/reports/${res.report_id}`);
+      setDetail(updated);
+      fetchReports();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "重新生成失败");
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -127,10 +164,20 @@ export default function ReportsPage() {
       <div className="min-h-screen bg-background">
         <AppHeader />
         <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => setDetail(null)}>← 返回</Button>
-            <h2 className="text-xl font-bold">{detail.period} 月度报告</h2>
-            <Badge variant={detail.status === "completed" ? "default" : "secondary"}>{detail.status}</Badge>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="sm" onClick={() => setDetail(null)}>← 返回</Button>
+              <h2 className="text-xl font-bold">{detail.period} 月度报告</h2>
+              <Badge variant={detail.status === "completed" ? "default" : "secondary"}>{detail.status}</Badge>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRegenerate}
+              disabled={regenerating}
+            >
+              {regenerating ? "重新生成中..." : "🔄 重新生成"}
+            </Button>
           </div>
 
           <Card>
@@ -174,9 +221,20 @@ export default function ReportsPage() {
             <h2 className="text-xl font-bold">财务报告</h2>
             <p className="text-sm text-muted-foreground mt-1">AI 驱动的月度财务分析</p>
           </div>
-          <Button onClick={handleGenerate} disabled={generating}>
-            {generating ? "生成中..." : "生成本月报告"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {monthOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <Button onClick={() => handleGenerate()} disabled={generating}>
+              {generating ? "生成中..." : "生成报告"}
+            </Button>
+          </div>
         </div>
 
         {loading ? (
@@ -186,7 +244,7 @@ export default function ReportsPage() {
             <CardContent className="py-12 text-center">
               <p className="text-4xl mb-4">📊</p>
               <p className="text-muted-foreground">还没有生成过报告</p>
-              <p className="text-sm text-muted-foreground mt-1">点击"生成本月报告"开始第一份 AI 财务分析</p>
+              <p className="text-sm text-muted-foreground mt-1">选择月份并点击"生成报告"开始 AI 财务分析</p>
             </CardContent>
           </Card>
         ) : (
