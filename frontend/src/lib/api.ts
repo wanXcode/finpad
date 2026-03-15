@@ -23,7 +23,7 @@ export async function api<T = unknown>(
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
   });
 
   if (res.status === 401) {

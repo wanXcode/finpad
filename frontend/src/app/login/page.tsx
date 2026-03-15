@@ -23,9 +23,9 @@ export default function LoginPage() {
     try {
       const res = await api<{ access_token: string }>("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ username, password }),
+        body: { username, password },
       });
-      localStorage.setItem("token", res.access_token);
+      localStorage.setItem("finpad_token", res.access_token);
       router.push("/");
     } catch {
       setError("用户名或密码错误");
