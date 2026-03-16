@@ -24,6 +24,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 import { Mail } from "lucide-react";
 
 type Source = {
@@ -117,7 +125,7 @@ export default function SourcesPage() {
       setFormName(""); setFormImapHost(""); setFormImapEmail(""); setFormImapPassword("");
       fetchSources();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "创建失败");
+      toast.error(e instanceof Error ? e.message : "创建失败");
     } finally {
       setSaving(false);
     }
@@ -126,9 +134,9 @@ export default function SourcesPage() {
   const handleSync = async (id: number) => {
     try {
       const res = await api<{ message: string }>(`/api/sources/${id}/sync`, { method: "POST" });
-      alert(res.message);
+      toast.success(res.message);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "同步失败");
+      toast.error(e instanceof Error ? e.message : "同步失败");
     }
   };
 
@@ -138,7 +146,7 @@ export default function SourcesPage() {
       await api(`/api/sources/${id}`, { method: "DELETE" });
       fetchSources();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "删除失败");
+      toast.error(e instanceof Error ? e.message : "删除失败");
     }
   };
 
@@ -149,7 +157,7 @@ export default function SourcesPage() {
       setActiveSourceName(source.name);
       setLogsDialogOpen(true);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "获取日志失败");
+      toast.error(e instanceof Error ? e.message : "获取日志失败");
     }
   };
 
@@ -178,19 +186,29 @@ export default function SourcesPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>平台</Label>
-                  <select value={formPlatform} onChange={(e) => setFormPlatform(e.target.value)} className="w-full border rounded px-3 py-2 text-sm bg-background">
-                    {PLATFORM_OPTIONS.map((p) => (
-                      <option key={p.value} value={p.value}>{p.emoji} {p.label}</option>
-                    ))}
-                  </select>
+                  <Select value={formPlatform} onValueChange={(v) => { if (v) setFormPlatform(v); }}>
+                    <SelectTrigger className="w-full text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PLATFORM_OPTIONS.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>{p.emoji} {p.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>接入方式</Label>
-                  <select value={formType} onChange={(e) => setFormType(e.target.value)} className="w-full border rounded px-3 py-2 text-sm bg-background">
-                    {TYPE_OPTIONS.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
+                  <Select value={formType} onValueChange={(v) => { if (v) setFormType(v); }}>
+                    <SelectTrigger className="w-full text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TYPE_OPTIONS.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {formType === "email_imap" && (
                   <>

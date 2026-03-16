@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from app.auth import get_current_user
 from app.database import get_async_db
 
@@ -11,6 +11,16 @@ class TransactionUpdate(BaseModel):
     category: Optional[str] = None
     note: Optional[str] = None
     direction: Optional[str] = None
+
+
+class BatchUpdate(BaseModel):
+    ids: List[int]
+    category: Optional[str] = None
+    note: Optional[str] = None
+
+
+class BatchDelete(BaseModel):
+    ids: List[int]
 
 
 class TransactionCreate(BaseModel):
@@ -120,6 +130,56 @@ async def create_transaction(req: TransactionCreate, user: dict = Depends(get_cu
         )
         await db.commit()
         return {"id": cursor.lastrowid, "tx_id": tx_id, "message": "交易创建成功"}
+    finally:
+        await db.close()
+
+
+@router.patch("/batch")
+async def batch_update_transactions(req: BatchUpdate, user: dict = Depends(get_current_user)):
+    if not req.ids:
+        raise HTTPException(status_code=400, detail="ids 不能为空")
+    updates = []
+    params = []
+    if req.category is not None:
+        updates.append("category = ?")
+        params.append(req.category)
+    if req.note is not None:
+        updates.append("note = ?")
+        params.append(req.note)
+    if not updates:
+        raise HTTPException(status_code=400, detail="没有要更新的字段")
+
+    placeholders = ",".join("?" for _ in req.ids)
+    params.extend(req.ids)
+    params.append(user["id"])
+
+    db = await get_async_db()
+    try:
+        cursor = await db.execute(
+            f"UPDATE transactions SET {', '.join(updates)} WHERE id IN ({placeholders}) AND user_id = ?",
+            params,
+        )
+        await db.commit()
+        return {"message": f"已更新 {cursor.rowcount} 条", "updated": cursor.rowcount}
+    finally:
+        await db.close()
+
+
+@router.delete("/batch")
+async def batch_delete_transactions(req: BatchDelete, user: dict = Depends(get_current_user)):
+    if not req.ids:
+        raise HTTPException(status_code=400, detail="ids 不能为空")
+    placeholders = ",".join("?" for _ in req.ids)
+    params = list(req.ids) + [user["id"]]
+
+    db = await get_async_db()
+    try:
+        cursor = await db.execute(
+            f"DELETE FROM transactions WHERE id IN ({placeholders}) AND user_id = ?",
+            params,
+        )
+        await db.commit()
+        return {"message": f"已删除 {cursor.rowcount} 条", "deleted": cursor.rowcount}
     finally:
         await db.close()
 

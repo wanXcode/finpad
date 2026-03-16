@@ -98,16 +98,23 @@ async def trigger_sync(source_id: int, user: dict = Depends(get_current_user)):
 
         if src_type == "email_imap" and config_json:
             import json as _json
-            from app.sync_engine import sync_from_email
-            config = _json.loads(config_json)
+            try:
+                config = _json.loads(config_json)
+            except Exception as e:
+                return {"message": f"配置解析失败: {str(e)[:200]}", "status": "error", "error": str(e)[:500]}
             config["platform"] = source.get("platform", "alipay")
             try:
+                from app.sync_engine import sync_from_email
                 result = sync_from_email(config, data_source_id=source_id)
                 return {"message": f"同步完成: {source['name']}", "status": "success", "result": result}
             except Exception as e:
-                return {"message": f"同步失败: {str(e)[:200]}", "status": "error", "error": str(e)[:500]}
+                return {"message": f"IMAP连接失败: {str(e)[:200]}", "status": "error", "error": str(e)[:500]}
         else:
             return {"message": f"同步任务已触发: {source['name']}", "status": "queued"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"message": f"同步失败: {str(e)[:200]}", "status": "error", "error": str(e)[:500]}
     finally:
         await db.close()
 

@@ -23,6 +23,14 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 type Account = {
   id: number;
@@ -114,7 +122,7 @@ export default function SettingsPage() {
       setAccName("");
       setAccBalance(0);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "添加失败");
+      toast.error(e instanceof Error ? e.message : "添加失败");
     }
   };
 
@@ -124,7 +132,7 @@ export default function SettingsPage() {
       await api(`/api/accounts/${id}`, { method: "DELETE" });
       setAccounts(accounts.filter((a) => a.id !== id));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "删除失败");
+      toast.error(e instanceof Error ? e.message : "删除失败");
     }
   };
 
@@ -136,7 +144,7 @@ export default function SettingsPage() {
       });
       setMappings(mappings.map((m) => m.id === id ? { ...m, mapped_category: newCategory } : m));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "更新失败");
+      toast.error(e instanceof Error ? e.message : "更新失败");
     }
   };
 
@@ -258,17 +266,30 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">平台</Label>
-                    <select value={accPlatform} onChange={(e) => setAccPlatform(e.target.value)} className="border rounded px-2 py-2 text-sm bg-background">
-                      <option>支付宝</option><option>微信</option><option>招商银行</option><option>工商银行</option>
-                    </select>
+                    <Select value={accPlatform} onValueChange={(v) => { if (v) setAccPlatform(v); }}>
+                      <SelectTrigger className="w-36 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="支付宝">支付宝</SelectItem>
+                        <SelectItem value="微信">微信</SelectItem>
+                        <SelectItem value="招商银行">招商银行</SelectItem>
+                        <SelectItem value="工商银行">工商银行</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">类型</Label>
-                    <select value={accType} onChange={(e) => setAccType(e.target.value)} className="border rounded px-2 py-2 text-sm bg-background">
-                      <option value="ewallet">电子钱包</option>
-                      <option value="savings">储蓄卡</option>
-                      <option value="credit">信用卡</option>
-                    </select>
+                    <Select value={accType} onValueChange={(v) => { if (v) setAccType(v); }}>
+                      <SelectTrigger className="w-36 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ewallet">电子钱包</SelectItem>
+                        <SelectItem value="savings">储蓄卡</SelectItem>
+                        <SelectItem value="credit">信用卡</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">余额</Label>
@@ -301,15 +322,19 @@ export default function SettingsPage() {
                           <span>{m.original_category}</span>
                           <span className="text-muted-foreground">→</span>
                         </div>
-                        <select
+                        <Select
                           value={m.mapped_category}
-                          onChange={(e) => handleMappingChange(m.id, e.target.value)}
-                          className="border rounded px-2 py-1 text-sm bg-background"
+                          onValueChange={(val) => { if (val) handleMappingChange(m.id, val); }}
                         >
-                          {UNIFIED_CATEGORIES.map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>
+                          <SelectTrigger className="w-32 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {UNIFIED_CATEGORIES.map((c) => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     ))}
                   </div>

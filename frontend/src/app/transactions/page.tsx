@@ -129,10 +129,11 @@ export default function TransactionsPage() {
     if (selected.size === 0) return;
     if (!confirm(`确认删除 ${selected.size} 条交易？此操作不可撤销。`)) return;
     try {
-      for (const id of selected) {
-        await api(`/api/transactions/${id}`, { method: "DELETE" });
-      }
-      toast.success(`已删除 ${selected.size} 条`);
+      const res = await api<{ message: string; deleted: number }>(`/api/transactions/batch`, {
+        method: "DELETE",
+        body: JSON.stringify({ ids: [...selected] }),
+      });
+      toast.success(res.message);
       setSelected(new Set());
       load();
     } catch { toast.error("删除失败"); }
@@ -141,13 +142,11 @@ export default function TransactionsPage() {
   const batchChangeCategory = async (cat: string) => {
     if (selected.size === 0) return;
     try {
-      for (const id of selected) {
-        await api(`/api/transactions/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ category: cat }),
-        });
-      }
-      toast.success(`已更新 ${selected.size} 条分类为「${cat}」`);
+      const res = await api<{ message: string; updated: number }>(`/api/transactions/batch`, {
+        method: "PATCH",
+        body: JSON.stringify({ ids: [...selected], category: cat }),
+      });
+      toast.success(res.message);
       setSelected(new Set());
       load();
     } catch { toast.error("更新失败"); }

@@ -14,6 +14,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 type Report = {
   id: number;
@@ -76,10 +84,10 @@ export default function ReportsPage() {
     setGenerating(true);
     try {
       const res = await api<{ message: string }>(`/api/reports/generate?period=${p}`, { method: "POST" });
-      alert(res.message);
+      toast.success(res.message);
       fetchReports();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "生成失败");
+      toast.error(e instanceof Error ? e.message : "生成失败");
     } finally {
       setGenerating(false);
     }
@@ -90,13 +98,13 @@ export default function ReportsPage() {
     setRegenerating(true);
     try {
       const res = await api<{ message: string; report_id: number }>(`/api/reports/generate?period=${detail.period}`, { method: "POST" });
-      alert(res.message);
+      toast.success(res.message);
       // Reload the detail
       const updated = await api<ReportDetail>(`/api/reports/${res.report_id}`);
       setDetail(updated);
       fetchReports();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "重新生成失败");
+      toast.error(e instanceof Error ? e.message : "重新生成失败");
     } finally {
       setRegenerating(false);
     }
@@ -107,7 +115,7 @@ export default function ReportsPage() {
       const res = await api<ReportDetail>(`/api/reports/${id}`);
       setDetail(res);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "获取失败");
+      toast.error(e instanceof Error ? e.message : "获取失败");
     }
   };
 
@@ -222,15 +230,16 @@ export default function ReportsPage() {
             <p className="text-sm text-muted-foreground mt-1">AI 驱动的月度财务分析</p>
           </div>
           <div className="flex items-center gap-2">
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-            >
-              {monthOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            <Select value={selectedPeriod} onValueChange={(v) => { if (v) setSelectedPeriod(v); }}>
+              <SelectTrigger className="w-44 h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button onClick={() => handleGenerate()} disabled={generating}>
               {generating ? "生成中..." : "生成报告"}
             </Button>
