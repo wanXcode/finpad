@@ -291,7 +291,7 @@ export default function DashboardPage() {
                 {summary.recent_transactions.map((tx) => (
                   <tr
                     key={tx.id}
-                    className="border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
+                    className="border-b last:border-0 even:bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
                     onClick={() => router.push(`/transactions?highlight=${tx.id}`)}
                   >
                     <td className="py-2.5 whitespace-nowrap">{tx.tx_time?.slice(0, 16)}</td>

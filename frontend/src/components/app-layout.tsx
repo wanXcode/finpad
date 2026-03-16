@@ -2,8 +2,9 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { Menu } from "lucide-react";
+import { Menu, ChevronRight } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface AppLayoutProps {
@@ -38,6 +39,8 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
     localStorage.removeItem("token");
     router.push("/login");
   };
+
+  const isDashboard = !title || title === "Dashboard";
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -77,10 +80,26 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
               <Menu className="w-5 h-5" />
             </Button>
           )}
-          {title && (
+          {/* Breadcrumb - desktop only */}
+          {!isMobile && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm text-muted-foreground">FinPad</span>
+              {!isDashboard && title && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-sm font-medium">{title}</span>
+                </>
+              )}
+            </div>
+          )}
+          {/* Mobile title */}
+          {isMobile && title && (
             <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
           )}
-          <div className="ml-auto flex items-center gap-2">{actions}</div>
+          <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
+            {actions}
+          </div>
         </header>
 
         {/* Page content */}

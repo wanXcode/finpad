@@ -23,6 +23,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Mail } from "lucide-react";
 
 type Source = {
   id: number;
@@ -219,14 +221,33 @@ export default function SourcesPage() {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground text-center py-12">加载中...</p>
+          <div className="grid gap-4">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="w-10 h-10 rounded-full" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-4 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : sources.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">还没有配置任何数据源</p>
-              <p className="text-sm text-muted-foreground mt-1">点击右上角"添加数据源"开始</p>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-6">
+              <Mail className="w-10 h-10 text-muted-foreground" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">还没有配置数据源</h2>
+            <p className="text-muted-foreground mb-6 max-w-md">配置邮箱自动抓取或手动上传账单文件，让 FinPad 持续同步你的账单</p>
+            <Button onClick={() => setDialogOpen(true)}>+ 添加数据源</Button>
+          </div>
         ) : (
           <div className="grid gap-4">
             {sources.map((s) => {

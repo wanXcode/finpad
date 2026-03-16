@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   Search, Filter, ChevronLeft, ChevronRight, Trash2, Tag,
-  X, Calendar as CalIcon,
+  X, Calendar as CalIcon, FileUp,
 } from "lucide-react";
 
 type Transaction = {
@@ -276,9 +276,22 @@ export default function TransactionsPage() {
               {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
             </div>
           ) : !data || data.items.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground">
-              {hasFilters ? "没有符合条件的交易" : "暂无交易数据"}
-            </div>
+            hasFilters ? (
+              <div className="py-16 text-center text-muted-foreground">
+                没有符合条件的交易
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <FileUp className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-1">还没有交易数据</h3>
+                <p className="text-muted-foreground mb-6 text-sm">导入你的第一份账单，开始记录</p>
+                <Button onClick={() => router.push("/import")} className="gap-2">
+                  <FileUp className="w-4 h-4" /> 导入第一份账单
+                </Button>
+              </div>
+            )
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -302,7 +315,7 @@ export default function TransactionsPage() {
                   {data.items.map((tx) => (
                     <tr
                       key={tx.id}
-                      className="border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
+                      className="border-b last:border-0 even:bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
                       onClick={() => openDetail(tx)}
                     >
                       <td className="py-2.5 px-3" onClick={e => e.stopPropagation()}>

@@ -22,6 +22,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Account = {
   id: number;
@@ -141,10 +142,31 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        
-        <main className="max-w-4xl mx-auto px-4 py-12 text-center text-muted-foreground">加载中...</main>
-      </div>
+      <AppLayout title="设置">
+        <h2 className="text-xl font-bold">设置</h2>
+        <div className="space-y-4 mt-4">
+          <Skeleton className="h-10 w-64" />
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-24" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-4 w-36" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-24" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-28" />
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
     );
   }
 

@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Report = {
   id: number;
@@ -237,7 +238,24 @@ export default function ReportsPage() {
         </div>
 
         {loading ? (
-          <p className="text-muted-foreground text-center py-12">加载中...</p>
+          <div className="grid gap-3">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i}>
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="w-10 h-10 rounded" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : reports.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
