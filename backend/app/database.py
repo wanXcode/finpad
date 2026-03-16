@@ -5,6 +5,39 @@ from app.config import settings
 
 DB_PATH = settings.DB_PATH
 
+# ---------------------------------------------------------------------------
+# Conditional SQLCipher support
+# If DB_ENCRYPTION_KEY is set, use sqlcipher3 as the sqlite module.
+# Otherwise fall back to standard sqlite3 (fully backward compatible).
+# ---------------------------------------------------------------------------
+_use_cipher = bool(settings.DB_ENCRYPTION_KEY)
+
+if _use_cipher:
+    try:
+        from sqlcipher3 import dbapi2 as sqlite_mod  # type: ignore[import-untyped]
+    except ImportError:
+        print(
+            "[FinPad] WARNING: DB_ENCRYPTION_KEY is set but sqlcipher3 is not installed. "
+            "Falling back to plain sqlite3. Install with: pip install sqlcipher3-binary"
+        )
+        sqlite_mod = sqlite3
+        _use_cipher = False
+else:
+    sqlite_mod = sqlite3
+
+# ---------------------------------------------------------------------------
+# Patch aiosqlite to use sqlcipher when encryption is enabled.
+# This must happen at import time, before any connection is created.
+# ---------------------------------------------------------------------------
+import aiosqlite
+import aiosqlite.core
+
+if _use_cipher:
+    aiosqlite.core.sqlite3 = sqlite_mod  # type: ignore[attr-defined]
+
+# ---------------------------------------------------------------------------
+# Schema
+# ---------------------------------------------------------------------------
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,19 +177,39 @@ CREATE TABLE IF NOT EXISTS analysis_reports (
 """
 
 
+# ---------------------------------------------------------------------------
+# Synchronous connection (used by init_db / migration)
+# ---------------------------------------------------------------------------
 def get_db():
     """Get a synchronous DB connection (for init/migration)."""
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite_mod.connect(DB_PATH)
+    if _use_cipher:
+        conn.execute(f'PRAGMA key = "{settings.DB_ENCRYPTION_KEY}"')
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.row_factory = sqlite3.Row
+    conn.row_factory = sqlite_mod.Row
     return conn
 
 
+# ---------------------------------------------------------------------------
+# Init / migration
+# ---------------------------------------------------------------------------
 def init_db():
     """Initialize database schema."""
     conn = get_db()
+
+    if _use_cipher:
+        # Verify the database is accessible with the provided key
+        try:
+            conn.execute("SELECT count(*) FROM sqlite_master")
+        except Exception:
+            print(
+                "[FinPad] ERROR: Cannot decrypt database. "
+                "Check DB_ENCRYPTION_KEY or run: python scripts/encrypt_db.py <key>"
+            )
+            raise
+
     conn.executescript(SCHEMA)
     conn.commit()
 
@@ -175,15 +228,17 @@ def init_db():
     conn.close()
 
 
-# --- Async helpers ---
-
-import aiosqlite
-
-
+# ---------------------------------------------------------------------------
+# Async connection
+# ---------------------------------------------------------------------------
 async def get_async_db() -> aiosqlite.Connection:
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     db = await aiosqlite.connect(DB_PATH)
+    if _use_cipher:
+        await db.execute(f'PRAGMA key = "{settings.DB_ENCRYPTION_KEY}"')
     await db.execute("PRAGMA journal_mode=WAL")
     await db.execute("PRAGMA foreign_keys=ON")
-    db.row_factory = aiosqlite.Row
+    # Use the correct Row type: sqlcipher3 Row when encrypted, sqlite3 Row otherwise.
+    # aiosqlite.Row is just sqlite3.Row, which doesn't accept sqlcipher cursors.
+    db.row_factory = sqlite_mod.Row
     return db

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = f"sqlite+aiosqlite:///{Path(__file__).parent.parent / 'data' / 'finpad.db'}"
     DB_PATH: str = str(Path(__file__).parent.parent / "data" / "finpad.db")
+    DB_ENCRYPTION_KEY: str = ""  # Empty = no encryption (backward compatible)
 
     # AI
     AI_API_BASE: str = "https://api.5666.net/v1"
