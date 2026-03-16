@@ -41,8 +41,16 @@ export default function LoginPage() {
       localStorage.setItem("finpad_token", res.access_token);
       setupTokenRefresh();
       router.push("/");
-    } catch {
-      setError("用户名或密码错误");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        if (err.message === "Unauthorized" || err.message.includes("401")) {
+          setError("用户名或密码错误");
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError("用户名或密码错误");
+      }
     } finally {
       setLoading(false);
     }

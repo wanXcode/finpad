@@ -239,9 +239,13 @@ export default function AdminUsersPage() {
                     {user.tx_count}
                   </TableCell>
                   <TableCell className="text-right">
+                    {user.id === currentUser?.id ? (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        当前用户
+                      </Badge>
+                    ) : (
                     <div className="flex items-center justify-end gap-1">
                       {/* Toggle role */}
-                      {user.id !== currentUser?.id && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -259,7 +263,6 @@ export default function AdminUsersPage() {
                             <Shield className="h-4 w-4" />
                           )}
                         </Button>
-                      )}
 
                       {/* Reset password */}
                       <Button
@@ -277,7 +280,6 @@ export default function AdminUsersPage() {
                       </Button>
 
                       {/* Toggle active */}
-                      {user.id !== currentUser?.id && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -291,8 +293,8 @@ export default function AdminUsersPage() {
                             <UserCheck className="h-4 w-4 text-green-600" />
                           )}
                         </Button>
-                      )}
                     </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

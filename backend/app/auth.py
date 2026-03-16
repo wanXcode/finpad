@@ -59,6 +59,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         user_dict = dict(user)
         if not user_dict["is_active"]:
             raise HTTPException(status_code=403, detail="账户已停用")
+        user_dict["is_active"] = bool(user_dict["is_active"])
         return user_dict
     finally:
         await db.close()

@@ -24,6 +24,7 @@ class BatchDelete(BaseModel):
 
 
 class TransactionCreate(BaseModel):
+    tx_id: Optional[str] = None
     tx_time: str
     platform: str = ""
     account: str = ""
@@ -120,7 +121,10 @@ async def create_transaction(req: TransactionCreate, user: dict = Depends(get_cu
     from datetime import datetime
     db = await get_async_db()
     try:
-        tx_id = f"manual_{hashlib.sha1(f'{req.tx_time}|{req.amount}|{req.counterparty}|{datetime.utcnow().isoformat()}'.encode()).hexdigest()[:16]}"
+        if req.tx_id:
+            tx_id = req.tx_id
+        else:
+            tx_id = f"manual_{hashlib.sha1(f'{req.tx_time}|{req.amount}|{req.counterparty}|{datetime.utcnow().isoformat()}'.encode()).hexdigest()[:16]}"
         cursor = await db.execute(
             """INSERT INTO transactions
                (user_id, tx_id, tx_time, platform, account, direction, amount, category, original_category, counterparty, note, source)

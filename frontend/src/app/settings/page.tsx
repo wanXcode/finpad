@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, getToken } from "@/lib/api";
+import { api, getToken, type UserInfo } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { AppLayout } from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,13 +49,6 @@ type CategoryMapping = {
   mapped_category: string;
 };
 
-type UserInfo = {
-  id: number;
-  username: string;
-  display_name: string;
-  role: string;
-};
-
 const UNIFIED_CATEGORIES = [
   "餐饮",
   "交通",
@@ -97,7 +91,9 @@ export default function SettingsPage() {
   // Password change
   const [oldPw, setOldPw] = useState("");
   const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
   const [pwMsg, setPwMsg] = useState("");
+  const [pwMsgType, setPwMsgType] = useState<"success" | "error" | "">("");
 
   // Account form
   const [accName, setAccName] = useState("");
@@ -145,16 +141,29 @@ export default function SettingsPage() {
   };
 
   const handleChangePw = async () => {
+    if (newPw.length < 8) {
+      setPwMsg("密码长度至少8位");
+      setPwMsgType("error");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwMsg("两次输入的密码不一致");
+      setPwMsgType("error");
+      return;
+    }
     try {
       const res = await api<{ message: string }>("/api/auth/change-password", {
         method: "POST",
         body: { old_password: oldPw, new_password: newPw },
       });
       setPwMsg(res.message);
+      setPwMsgType("success");
       setOldPw("");
       setNewPw("");
+      setConfirmPw("");
     } catch (e) {
       setPwMsg(e instanceof Error ? e.message : "修改失败");
+      setPwMsgType("error");
     }
   };
 
@@ -304,10 +313,18 @@ export default function SettingsPage() {
                   onChange={(e) => setNewPw(e.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>确认新密码</Label>
+                <Input
+                  type="password"
+                  value={confirmPw}
+                  onChange={(e) => setConfirmPw(e.target.value)}
+                />
+              </div>
               {pwMsg && (
-                <p className="text-sm text-muted-foreground">{pwMsg}</p>
+                <p className={cn("text-sm", pwMsgType === "success" ? "text-green-600" : "text-red-500")}>{pwMsg}</p>
               )}
-              <Button onClick={handleChangePw} disabled={!oldPw || !newPw}>
+              <Button onClick={handleChangePw} disabled={!oldPw || !newPw || !confirmPw}>
                 确认修改
               </Button>
             </CardContent>
