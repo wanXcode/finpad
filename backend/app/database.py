@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     display_name TEXT,
+    role TEXT NOT NULL DEFAULT 'user',
+    is_active INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -18,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL DEFAULT 1,
-    tx_id TEXT UNIQUE NOT NULL,
+    tx_id TEXT NOT NULL,
     tx_time DATETIME NOT NULL,
     platform TEXT NOT NULL,
     account TEXT,
@@ -31,6 +33,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     source TEXT,
     ingest_batch TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, tx_id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
@@ -155,6 +158,19 @@ def init_db():
     """Initialize database schema."""
     conn = get_db()
     conn.executescript(SCHEMA)
+    conn.commit()
+
+    # Migration: add role and is_active columns if missing
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+    except Exception:
+        pass
+    # Set existing admin user role
+    conn.execute("UPDATE users SET role = 'admin' WHERE username = 'admin' AND role = 'user'")
     conn.commit()
     conn.close()
 

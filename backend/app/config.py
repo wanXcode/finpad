@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     DEFAULT_USERNAME: str = "admin"
     DEFAULT_PASSWORD: str = "finpad2026"
 
+    # Registration
+    ALLOW_REGISTRATION: bool = True
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

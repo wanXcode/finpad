@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Menu, ChevronRight } from "lucide-react";
 import { useState, useEffect } from "react";
+import { getCurrentUser, setupTokenRefresh, type UserInfo } from "@/lib/api";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -18,6 +19,7 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   useEffect(() => {
     const check = () => {
@@ -30,13 +32,44 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // Fetch user info and setup token refresh
+  useEffect(() => {
+    getCurrentUser()
+      .then((user) => {
+        setUserInfo(user);
+        // If on admin path and not admin, redirect
+        if (pathname.startsWith("/admin") && user.role !== "admin") {
+          router.push("/");
+        }
+      })
+      .catch(() => {
+        // Not authenticated, redirect to login
+        router.push("/login");
+      });
+    setupTokenRefresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Redirect non-admin users away from admin pages on navigation
+  useEffect(() => {
+    if (
+      userInfo &&
+      pathname.startsWith("/admin") &&
+      userInfo.role !== "admin"
+    ) {
+      router.push("/");
+    }
+  }, [pathname, userInfo, router]);
+
   // Close sidebar on navigation for mobile
   useEffect(() => {
     if (isMobile) setSidebarOpen(false);
   }, [pathname, isMobile]);
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("finpad_token");
+    }
     router.push("/login");
   };
 
@@ -63,7 +96,10 @@ export function AppLayout({ children, title, actions }: AppLayoutProps) {
         }
       >
         {(sidebarOpen || !isMobile) && (
-          <AppSidebar onLogout={handleLogout} />
+          <AppSidebar
+            onLogout={handleLogout}
+            role={userInfo?.role}
+          />
         )}
       </div>
 

@@ -1,9 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import Link from "next/link";
+import { api, setupTokenRefresh, checkRegistrationOpen } from "@/lib/api";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +23,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [registrationOpen, setRegistrationOpen] = useState(false);
+
+  useEffect(() => {
+    checkRegistrationOpen().then(setRegistrationOpen);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +39,7 @@ export default function LoginPage() {
         body: { username, password },
       });
       localStorage.setItem("finpad_token", res.access_token);
+      setupTokenRefresh();
       router.push("/");
     } catch {
       setError("用户名或密码错误");
@@ -77,6 +90,17 @@ export default function LoginPage() {
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               登录
             </Button>
+            {registrationOpen && (
+              <p className="text-center text-sm text-muted-foreground">
+                还没有账号？{" "}
+                <Link
+                  href="/register"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  注册账号
+                </Link>
+              </p>
+            )}
           </form>
         </CardContent>
       </Card>

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db, get_async_db
 from app.auth import hash_password
-from app.routers import auth, dashboard, transactions, accounts, sources, categories, reports, imports, budgets
+from app.routers import auth, dashboard, transactions, accounts, sources, categories, reports, imports, budgets, admin
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -31,6 +31,7 @@ app.include_router(categories.router)
 app.include_router(reports.router)
 app.include_router(imports.router)
 app.include_router(budgets.router)
+app.include_router(admin.router)
 
 
 @app.on_event("startup")
@@ -45,7 +46,7 @@ async def startup():
         if not await cursor.fetchone():
             pw_hash = hash_password(settings.DEFAULT_PASSWORD)
             await db.execute(
-                "INSERT INTO users (username, password_hash, display_name) VALUES (?, ?, ?)",
+                "INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, 'admin')",
                 (settings.DEFAULT_USERNAME, pw_hash, "管理员"),
             )
             await db.commit()

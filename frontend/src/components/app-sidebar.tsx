@@ -10,6 +10,7 @@ import {
   PiggyBank,
   BarChart3,
   Settings,
+  Shield,
   LogOut,
   Wallet,
 } from "lucide-react";
@@ -31,13 +32,27 @@ const NAV_ITEMS = [
   { href: "/settings", label: "设置", icon: Settings },
 ];
 
+const ADMIN_NAV_ITEM = {
+  href: "/admin/users",
+  label: "用户管理",
+  icon: Shield,
+};
+
 interface AppSidebarProps {
   collapsed?: boolean;
+  role?: string;
   onLogout: () => void;
 }
 
-export function AppSidebar({ collapsed = false, onLogout }: AppSidebarProps) {
+export function AppSidebar({
+  collapsed = false,
+  role,
+  onLogout,
+}: AppSidebarProps) {
   const pathname = usePathname();
+
+  const allItems =
+    role === "admin" ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   return (
     <TooltipProvider>
@@ -48,18 +63,27 @@ export function AppSidebar({ collapsed = false, onLogout }: AppSidebarProps) {
         )}
       >
         {/* Logo */}
-        <div className={cn("flex items-center gap-2 px-4 h-14 shrink-0", collapsed && "justify-center")}>
+        <div
+          className={cn(
+            "flex items-center gap-2 px-4 h-14 shrink-0",
+            collapsed && "justify-center"
+          )}
+        >
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <Wallet className="w-4 h-4 text-primary-foreground" />
           </div>
-          {!collapsed && <span className="font-semibold text-lg tracking-tight">FinPad</span>}
+          {!collapsed && (
+            <span className="font-semibold text-lg tracking-tight">
+              FinPad
+            </span>
+          )}
         </div>
 
         <Separator />
 
         {/* Navigation */}
         <nav className="flex-1 flex flex-col gap-1 p-2 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
+          {allItems.map((item) => {
             const isActive =
               item.href === "/"
                 ? pathname === "/"
