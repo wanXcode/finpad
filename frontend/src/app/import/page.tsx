@@ -175,7 +175,7 @@ export default function ImportPage() {
     } catch (e: unknown) { toast.error("上传失败: " + (e instanceof Error ? e.message : "未知错误")); } finally { setUploading(false); }
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "text/csv": [".csv"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"], "application/vnd.ms-excel": [".xls"] }, maxFiles: 1, disabled: uploading });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "text/csv": [".csv"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"], "application/vnd.ms-excel": [".xls"], "application/pdf": [".pdf"] }, maxFiles: 1, disabled: uploading });
 
   const confirmImport = async () => {
     if (!preview) return;
@@ -437,7 +437,7 @@ export default function ImportPage() {
               <div {...getRootProps()} className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"} ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
                 <input {...getInputProps()} />
                 <div className="flex flex-col items-center gap-3">
-                  {uploading ? (<><div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center animate-pulse"><Upload className="w-6 h-6 text-muted-foreground" /></div><p className="text-sm text-muted-foreground">正在解析文件...</p></>) : (<><div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center"><FileUp className="w-6 h-6 text-muted-foreground" /></div><div><p className="font-medium">拖拽文件到这里，或点击选择</p><p className="text-sm text-muted-foreground mt-1">支持支付宝 CSV、微信 Excel（.csv / .xlsx）</p></div></>)}
+                  {uploading ? (<><div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center animate-pulse"><Upload className="w-6 h-6 text-muted-foreground" /></div><p className="text-sm text-muted-foreground">正在解析文件...</p></>) : (<><div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center"><FileUp className="w-6 h-6 text-muted-foreground" /></div><div><p className="font-medium">拖拽文件到这里，或点击选择</p><p className="text-sm text-muted-foreground mt-1">支持支付宝 CSV、微信 Excel、招行/工行 PDF（.csv / .xlsx / .pdf）</p></div></>)}
                 </div>
               </div>
             </CardContent></Card>

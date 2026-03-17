@@ -4,6 +4,9 @@ Import router - Upload and parse CSV/Excel files
 import io
 import csv
 import json
+import os
+import tempfile
+import subprocess
 from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from app.auth import get_current_user
@@ -14,6 +17,8 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 PLATFORM_DETECT = {
     "alipay": ["交易号", "商家订单号", "交易创建时间"],
     "wechat": ["微信支付账单", "交易时间", "交易类型"],
+    "cmb": ["招商银行", "记账日期", "交易金额"],
+    "icbc": ["工商银行", "收入", "支出"],
 }
 
 
@@ -36,6 +41,10 @@ def detect_platform(headers: list[str], content_preview: str) -> str:
         return "alipay"
     if any(k in content_preview for k in ["微信支付", "交易单号", "交易类型"]):
         return "wechat"
+    if any(k in content_preview for k in ["招商银行", "记账日期", "交易金额"]):
+        return "cmb"
+    if any(k in content_preview for k in ["工商银行", "本页支出算术合计", "本页收入算术合计"]):
+        return "icbc"
     return "unknown"
 
 
@@ -67,6 +76,17 @@ def parse_csv_preview(content: bytes, filename: str):
         "headers": headers,
         "preview_rows": [r for r in data_rows[:10]],
         "total_rows": len(data_rows),
+        "platform": platform,
+        "filename": filename,
+    }
+
+
+def parse_pdf_preview(content: bytes, filename: str):
+    platform = "cmb" if "cmb" in filename.lower() or "招行" in filename else "icbc" if "icbc" in filename.lower() or "工行" in filename else "unknown"
+    return {
+        "headers": ["PDF账单预览"],
+        "preview_rows": [["已识别为PDF文件，请确认平台后导入"]],
+        "total_rows": 1,
         "platform": platform,
         "filename": filename,
     }
@@ -122,8 +142,10 @@ async def upload_preview(
         preview = parse_csv_preview(content, filename)
     elif filename.lower().endswith((".xlsx", ".xls")):
         preview = parse_xlsx_preview(content, filename)
+    elif filename.lower().endswith(".pdf"):
+        preview = parse_pdf_preview(content, filename)
     else:
-        raise HTTPException(400, "不支持的文件格式，请上传 CSV 或 Excel 文件")
+        raise HTTPException(400, "不支持的文件格式，请上传 CSV、Excel 或 PDF 文件")
 
     return preview
 
@@ -135,7 +157,7 @@ async def confirm_import(
     user: dict = Depends(get_current_user),
 ):
     if platform == "unknown":
-        raise HTTPException(400, "未识别账单类型，请先手动选择 支付宝 / 微信 后再确认导入")
+        raise HTTPException(400, "未识别账单类型，请先手动选择正确的平台后再确认导入")
 
     content = await file.read()
     filename = file.filename or "unknown"
@@ -157,6 +179,13 @@ async def confirm_import(
             rows = list(reader)
             headers = [h.strip() for h in rows[0]]
             data_rows = rows[1:]
+            total = len(data_rows)
+            if platform == "alipay":
+                created, skipped, failed = await _import_alipay(db, headers, data_rows, user["id"])
+            elif platform == "wechat":
+                created, skipped, failed = await _import_wechat(db, headers, data_rows, user["id"])
+            else:
+                raise HTTPException(400, f"暂不支持 {platform} 格式的CSV导入")
         elif filename.lower().endswith((".xlsx", ".xls")):
             import openpyxl
             wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
@@ -173,21 +202,15 @@ async def confirm_import(
                     break
             headers = [h.strip() for h in all_rows[header_idx]]
             data_rows = all_rows[header_idx + 1:]
+            total = len(data_rows)
+            if platform == "wechat":
+                created, skipped, failed = await _import_wechat(db, headers, data_rows, user["id"])
+            else:
+                raise HTTPException(400, f"暂不支持 {platform} 格式的Excel导入")
+        elif filename.lower().endswith(".pdf"):
+            total, created, skipped, failed = await _import_bank_pdf(db, content, filename, platform, user["id"])
         else:
             raise HTTPException(400, "不支持的文件格式")
-
-        created = 0
-        skipped = 0
-        failed = 0
-        total = len(data_rows)
-
-        # Platform-specific parsing
-        if platform == "alipay":
-            created, skipped, failed = await _import_alipay(db, headers, data_rows, user["id"])
-        elif platform == "wechat":
-            created, skipped, failed = await _import_wechat(db, headers, data_rows, user["id"])
-        else:
-            raise HTTPException(400, f"暂不支持 {platform} 格式的导入")
 
         # Log import
         await db.execute("""
@@ -263,6 +286,65 @@ async def _import_alipay(db, headers: list, rows: list, user_id: int):
 
     await db.commit()
     return created, skipped, failed
+
+
+async def _import_bank_pdf(db, content: bytes, filename: str, platform: str, user_id: int):
+    if platform not in ("cmb", "icbc"):
+        raise HTTPException(400, f"暂不支持 {platform} 格式的PDF导入")
+
+    parser_name = "parse_cmb_pdf.js" if platform == "cmb" else "parse_icbc_pdf.js"
+    platform_label = "招商银行" if platform == "cmb" else "工商银行"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pdf_path = os.path.join(tmpdir, filename)
+        json_path = os.path.join(tmpdir, "out.json")
+        with open(pdf_path, "wb") as f:
+            f.write(content)
+
+        cmd = ["node", f"/app/scripts/parse/{parser_name}", pdf_path, json_path]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise HTTPException(400, f"{platform_label}账单解析失败: {proc.stderr.strip() or proc.stdout.strip() or '未知错误'}")
+
+        with open(json_path, "r", encoding="utf-8") as f:
+            records = json.load(f)
+
+    created = skipped = failed = 0
+    total = len(records)
+    for rec in records:
+        try:
+            tx_id = rec["tx_id"]
+            cursor = await db.execute(
+                "SELECT id FROM transactions WHERE user_id = ? AND tx_id = ?",
+                (user_id, tx_id),
+            )
+            if await cursor.fetchone():
+                skipped += 1
+                continue
+
+            await db.execute(
+                """INSERT INTO transactions (user_id, tx_id, tx_time, platform, account, direction, amount, category, original_category, counterparty, note, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual_upload')""",
+                (
+                    user_id,
+                    tx_id,
+                    rec.get("tx_time_text", ""),
+                    rec.get("platform", platform_label),
+                    rec.get("account", platform_label),
+                    rec.get("direction", "不计收支"),
+                    float(rec.get("amount", 0) or 0),
+                    rec.get("category", "银行卡流水"),
+                    rec.get("category", "银行卡流水"),
+                    rec.get("counterparty", ""),
+                    rec.get("note", ""),
+                ),
+            )
+            created += 1
+        except Exception:
+            failed += 1
+
+    await db.commit()
+    return total, created, skipped, failed
 
 
 async def _import_wechat(db, headers: list, rows: list, user_id: int):
