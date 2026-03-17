@@ -37,13 +37,22 @@ def detect_platform(headers: list[str], content_preview: str) -> str:
     if any(k in joined_headers for k in ["微信支付", "交易单号", "交易类型"]):
         return "wechat"
 
+    # Bank statement detection (generic: ICBC, CMB, etc.)
+    bank_keywords = ["记账日期", "交易日期", "余额", "摘要", "交易摘要", "对方账户", "对方户名", "币种"]
+    if sum(1 for k in bank_keywords if k in joined_headers) >= 2:
+        if any(k in joined_headers or k in content_preview for k in ["工商银行", "工行"]):
+            return "icbc"
+        if any(k in joined_headers or k in content_preview for k in ["招商银行", "招行"]):
+            return "cmb"
+        return "bank"
+
     if any(k in content_preview for k in ["交易号", "商家订单号", "交易创建时间", "支付宝"]):
         return "alipay"
     if any(k in content_preview for k in ["微信支付", "交易单号", "交易类型"]):
         return "wechat"
-    if any(k in content_preview for k in ["招商银行", "记账日期", "交易金额"]):
+    if any(k in content_preview for k in ["招商银行", "记账日期"]):
         return "cmb"
-    if any(k in content_preview for k in ["工商银行", "本页支出算术合计", "本页收入算术合计"]):
+    if any(k in content_preview for k in ["工商银行"]):
         return "icbc"
     return "unknown"
 
@@ -184,6 +193,8 @@ async def confirm_import(
                 created, skipped, failed = await _import_alipay(db, headers, data_rows, user["id"])
             elif platform == "wechat":
                 created, skipped, failed = await _import_wechat(db, headers, data_rows, user["id"])
+            elif platform in ("icbc", "cmb", "bank"):
+                created, skipped, failed = await _import_bank_csv(db, headers, data_rows, platform, user["id"])
             else:
                 raise HTTPException(400, f"暂不支持 {platform} 格式的CSV导入")
         elif filename.lower().endswith((".xlsx", ".xls")):
@@ -205,6 +216,8 @@ async def confirm_import(
             total = len(data_rows)
             if platform == "wechat":
                 created, skipped, failed = await _import_wechat(db, headers, data_rows, user["id"])
+            elif platform in ("icbc", "cmb", "bank"):
+                created, skipped, failed = await _import_bank_csv(db, headers, data_rows, platform, user["id"])
             else:
                 raise HTTPException(400, f"暂不支持 {platform} 格式的Excel导入")
         elif filename.lower().endswith(".pdf"):
@@ -281,6 +294,96 @@ async def _import_alipay(db, headers: list, rows: list, user_id: int):
             """, (user_id, tx_id, tx_time, direction, amount, category, category, counterparty, note))
             created += 1
 
+        except Exception:
+            failed += 1
+
+    await db.commit()
+    return created, skipped, failed
+
+
+async def _import_bank_csv(db, headers: list, rows: list, platform: str, user_id: int):
+    """Import bank CSV/Excel data (ICBC, CMB, generic bank)"""
+    idx = {h.strip(): i for i, h in enumerate(headers)}
+    platform_labels = {"icbc": "工商银行", "cmb": "招商银行", "bank": "银行"}
+    platform_label = platform_labels.get(platform, "银行")
+    created = skipped = failed = 0
+
+    # Flexible column name matching
+    def find_col(*candidates):
+        for c in candidates:
+            for h, i in idx.items():
+                if c in h:
+                    return i
+        return None
+
+    date_col = find_col("记账日期", "交易日期", "日期", "时间")
+    amount_col = find_col("交易金额", "金额", "发生额")
+    income_col = find_col("收入金额", "收入", "贷方金额", "贷方发生额")
+    expense_col = find_col("支出金额", "支出", "借方金额", "借方发生额")
+    balance_col = find_col("余额", "账户余额", "账面余额")
+    summary_col = find_col("摘要", "交易摘要", "用途", "备注")
+    counterparty_col = find_col("对方户名", "对方账户名称", "交易对方", "对方名称", "对方")
+    currency_col = find_col("币种", "币别")
+
+    if date_col is None:
+        raise ValueError("未找到日期列，请确认账单格式")
+
+    for row_idx, row in enumerate(rows):
+        if not row or all(not str(c).strip() for c in row):
+            continue
+        try:
+            date_val = str(row[date_col]).strip().replace("/", "-") if date_col is not None and date_col < len(row) else ""
+            if not date_val or len(date_val) < 8:
+                continue
+
+            # Determine amount and direction
+            amount = 0.0
+            direction = "不计收支"
+            if income_col is not None and expense_col is not None:
+                inc_str = str(row[income_col]).strip().replace(",", "").replace("¥", "") if income_col < len(row) else ""
+                exp_str = str(row[expense_col]).strip().replace(",", "").replace("¥", "") if expense_col < len(row) else ""
+                inc = abs(float(inc_str)) if inc_str and inc_str not in ("", "-", "0", "0.00", "--") else 0
+                exp = abs(float(exp_str)) if exp_str and exp_str not in ("", "-", "0", "0.00", "--") else 0
+                if inc > 0:
+                    amount, direction = inc, "收入"
+                elif exp > 0:
+                    amount, direction = exp, "支出"
+            elif amount_col is not None and amount_col < len(row):
+                amt_str = str(row[amount_col]).strip().replace(",", "").replace("¥", "")
+                if amt_str and amt_str not in ("", "-", "--"):
+                    val = float(amt_str)
+                    amount = abs(val)
+                    direction = "支出" if val < 0 else ("收入" if val > 0 else "不计收支")
+
+            if amount == 0:
+                failed += 1
+                continue
+
+            summary = str(row[summary_col]).strip() if summary_col is not None and summary_col < len(row) else ""
+            counterparty = str(row[counterparty_col]).strip() if counterparty_col is not None and counterparty_col < len(row) else ""
+            balance = str(row[balance_col]).strip() if balance_col is not None and balance_col < len(row) else ""
+
+            import hashlib
+            tx_hash = hashlib.sha1(f"{date_val}|{amount}|{direction}|{summary}|{counterparty}".encode()).hexdigest()[:12]
+            tx_id = f"{platform}_{date_val.replace('-', '')}_{row_idx}_{tx_hash}"
+
+            cursor = await db.execute(
+                "SELECT id FROM transactions WHERE user_id = ? AND tx_id = ?",
+                (user_id, tx_id),
+            )
+            if await cursor.fetchone():
+                skipped += 1
+                continue
+
+            note_parts = [s for s in [summary, f"余额:{balance}" if balance else ""] if s]
+            note = " | ".join(note_parts)
+
+            await db.execute(
+                """INSERT INTO transactions (user_id, tx_id, tx_time, platform, account, direction, amount, category, original_category, counterparty, note, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual_upload')""",
+                (user_id, tx_id, date_val, platform_label, platform_label, direction, amount, "银行卡流水", "银行卡流水", counterparty, note),
+            )
+            created += 1
         except Exception:
             failed += 1
 

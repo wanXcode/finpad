@@ -33,6 +33,7 @@ const PLATFORM_OPTIONS = [
   { value: "wechat", label: "微信支付", emoji: "💚" },
   { value: "cmb", label: "招商银行", emoji: "🏦" },
   { value: "icbc", label: "工商银行", emoji: "🏛️" },
+  { value: "bank", label: "其他银行", emoji: "🏧" },
 ];
 
 const IMAP_HOSTS = [
