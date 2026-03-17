@@ -214,8 +214,11 @@ async def _import_alipay(db, headers: list, rows: list, user_id: int):
                 continue
             tx_id = f"alipay_{tx_no}"
 
-            # Check duplicate
-            cursor = await db.execute("SELECT id FROM transactions WHERE tx_id = ?", (tx_id,))
+            # Check duplicate within current user only
+            cursor = await db.execute(
+                "SELECT id FROM transactions WHERE user_id = ? AND tx_id = ?",
+                (user_id, tx_id),
+            )
             if await cursor.fetchone():
                 skipped += 1
                 continue
@@ -266,7 +269,10 @@ async def _import_wechat(db, headers: list, rows: list, user_id: int):
                 continue
             tx_id = f"wechat_{tx_no}"
 
-            cursor = await db.execute("SELECT id FROM transactions WHERE tx_id = ?", (tx_id,))
+            cursor = await db.execute(
+                "SELECT id FROM transactions WHERE user_id = ? AND tx_id = ?",
+                (user_id, tx_id),
+            )
             if await cursor.fetchone():
                 skipped += 1
                 continue
