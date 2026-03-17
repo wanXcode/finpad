@@ -174,6 +174,23 @@ CREATE TABLE IF NOT EXISTS analysis_reports (
     UNIQUE(user_id, period, report_type),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS pending_imports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    data_source_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL DEFAULT 1,
+    email_uid TEXT NOT NULL,
+    subject TEXT,
+    filename TEXT NOT NULL,
+    raw_path TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    FOREIGN KEY (data_source_id) REFERENCES data_sources(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 """
 
 

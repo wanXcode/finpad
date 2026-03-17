@@ -21,9 +21,10 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent  # finpad/
+BASE_DIR = Path(__file__).resolve().parent.parent  # finpad/backend/
 DATA_DIR = BASE_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
+PENDING_DIR = DATA_DIR / "pending"
 STATE_FILE = DATA_DIR / "sync_state.json"
 DB_PATH = DATA_DIR / "finpad.db"
 
@@ -225,6 +226,58 @@ def parse_icbc_pdf(pdf_path: Path, out_json: Path):
     subprocess.run(cmd, check=True, cwd=str(OLD_PROJECT))
 
 
+# ── Encrypted ZIP detection & pending ──
+
+def is_encrypted_zip(zip_path: Path) -> bool:
+    """Check if a ZIP file is password-protected."""
+    try:
+        with ZipFile(zip_path) as z:
+            for info in z.infolist():
+                if info.flag_bits & 0x1:  # bit 0 = encrypted
+                    return True
+            # Try extracting to verify (some ZIPs don't set the flag correctly)
+            try:
+                z.testzip()
+            except RuntimeError:
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def save_pending_import(data_source_id: int, user_id: int, email_uid: str,
+                        subject: str, filename: str, zip_path: Path, platform: str) -> int:
+    """Save an encrypted ZIP to pending dir and record in DB. Returns pending_import id."""
+    PENDING_DIR.mkdir(parents=True, exist_ok=True)
+    dest = PENDING_DIR / f"{data_source_id}_{email_uid}_{safe_name(filename)}"
+    if not dest.exists():
+        import shutil
+        shutil.copy2(str(zip_path), str(dest))
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        # Check for duplicate
+        cur = conn.execute(
+            "SELECT id FROM pending_imports WHERE data_source_id = ? AND email_uid = ? AND filename = ?",
+            (data_source_id, email_uid, filename)
+        )
+        existing = cur.fetchone()
+        if existing:
+            conn.close()
+            return existing[0]
+
+        cur = conn.execute(
+            """INSERT INTO pending_imports (data_source_id, user_id, email_uid, subject, filename, raw_path, platform)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (data_source_id, user_id, email_uid, subject, filename, str(dest), platform)
+        )
+        conn.commit()
+        pid = cur.lastrowid
+    finally:
+        conn.close()
+    return pid
+
+
 # ── Database ──
 
 def insert_transactions(rows: list[dict], user_id: int = 1, source: str = "email_sync") -> dict:
@@ -276,33 +329,116 @@ def insert_transactions(rows: list[dict], user_id: int = 1, source: str = "email
 def write_sync_log(data_source_id: int, status: str, total: int, new: int, dups: int, errors: int, error_msg: str | None):
     conn = sqlite3.connect(str(DB_PATH))
     conn.execute(
-        """INSERT INTO sync_logs (data_source_id, status, total_fetched, new_inserted,
-           duplicates_skipped, errors, error_message, started_at, finished_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))""",
-        (data_source_id, status, total, new, dups, errors, error_msg),
+        """INSERT INTO sync_logs (data_source_id, status, records_total, records_created,
+           records_skipped, error_message, started_at, finished_at)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))""",
+        (data_source_id, status, total, new, dups, error_msg),
     )
-    conn.execute("UPDATE data_sources SET last_sync_at = datetime('now') WHERE id = ?", (data_source_id,))
+    conn.execute(
+        "UPDATE data_sources SET last_sync_at = datetime('now'), last_sync_status = ?, last_sync_message = ? WHERE id = ?",
+        (status, error_msg, data_source_id),
+    )
     conn.commit()
     conn.close()
 
 
 # ── Main sync ──
 
-def sync_from_email(config: dict, data_source_id: int = 0):
+def _process_email_for_platform(platform: str, msg, eid_s: str, subject: str,
+                                  email_dir: Path, zip_pwd: str,
+                                  data_source_id: int) -> dict:
+    """Process a single email for a specific platform. Returns dict with rows, pending flag, or error."""
+    rows = []
+    pending = False
+
+    if platform == "wechat":
+        url = extract_wechat_link(msg)
+        if not url:
+            raise RuntimeError("No wechat download url found")
+        zip_path = email_dir / "wechat_bill.zip"
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        zip_path.write_bytes(r.content)
+        if is_encrypted_zip(zip_path):
+            save_pending_import(data_source_id, 1, eid_s, subject, zip_path.name, zip_path, platform)
+            return {"rows": [], "pending": True}
+        extracted = unzip_first(zip_path, email_dir / "unzipped", zip_pwd)
+        xlsx = next((p for p in extracted if p.suffix.lower() == ".xlsx"), None)
+        if not xlsx:
+            raise RuntimeError("No xlsx found in wechat zip")
+        rows = parse_wechat_xlsx(xlsx)
+    elif platform == "alipay":
+        attachment_paths = _save_attachments(msg, email_dir)
+        zip_file = next((p for p in attachment_paths if p.suffix.lower() == ".zip"), None)
+        if not zip_file:
+            raise RuntimeError("No zip attachment for alipay")
+        if is_encrypted_zip(zip_file):
+            save_pending_import(data_source_id, 1, eid_s, subject, zip_file.name, zip_file, platform)
+            return {"rows": [], "pending": True}
+        extracted = unzip_first(zip_file, email_dir / "unzipped", zip_pwd)
+        csv_file = next((p for p in extracted if p.suffix.lower() == ".csv"), None)
+        if not csv_file:
+            raise RuntimeError("No csv found in alipay zip")
+        rows = parse_alipay_csv(csv_file)
+    elif platform == "cmb":
+        attachment_paths = _save_attachments(msg, email_dir)
+        zip_file = next((p for p in attachment_paths if p.suffix.lower() == ".zip"), None)
+        if not zip_file:
+            raise RuntimeError("No zip attachment for cmb")
+        if is_encrypted_zip(zip_file):
+            save_pending_import(data_source_id, 1, eid_s, subject, zip_file.name, zip_file, platform)
+            return {"rows": [], "pending": True}
+        extracted = unzip_first(zip_file, email_dir / "unzipped", zip_pwd)
+        pdf_file = next((p for p in extracted if p.suffix.lower() == ".pdf"), None)
+        if not pdf_file:
+            raise RuntimeError("No pdf found in cmb zip")
+        out_json = email_dir / "cmb.normalized.json"
+        parse_cmb_pdf(pdf_file, out_json)
+        rows = json.loads(out_json.read_text(encoding="utf-8"))
+    elif platform == "icbc":
+        attachment_paths = _save_attachments(msg, email_dir)
+        pdf_file = next((p for p in attachment_paths if p.suffix.lower() == ".pdf"), None)
+        if not pdf_file:
+            zip_file = next((p for p in attachment_paths if p.suffix.lower() == ".zip"), None)
+            if zip_file:
+                if is_encrypted_zip(zip_file):
+                    save_pending_import(data_source_id, 1, eid_s, subject, zip_file.name, zip_file, platform)
+                    return {"rows": [], "pending": True}
+                extracted = unzip_first(zip_file, email_dir / "unzipped", zip_pwd)
+                pdf_file = next((p for p in extracted if p.suffix.lower() == ".pdf"), None)
+        if not pdf_file:
+            raise RuntimeError("No pdf found for icbc")
+        out_json = email_dir / "icbc.normalized.json"
+        parse_icbc_pdf(pdf_file, out_json)
+        rows = json.loads(out_json.read_text(encoding="utf-8"))
+
+    return {"rows": rows, "pending": False}
+
+
+def sync_from_email(config: dict, data_source_id: int = 0, platforms: list[str] | None = None):
     """
+    Sync email for one or more platforms in a single IMAP connection.
+
     config = {
         "imap_host": "imap.126.com",
         "email": "user@126.com",
         "password": "xxx",
-        "platform": "alipay",  # alipay/wechat/cmb/icbc
         "zip_password": "",
     }
+    platforms = ["alipay", "wechat"]  # list of platforms to sync
     """
     imap_host = config.get("imap_host", "imap.126.com")
     imap_user = config["email"]
     imap_pass = config["password"]
-    platform = config.get("platform", "alipay")
     zip_pwd = config.get("zip_password", "")
+
+    # Backward compat: if platforms not given, try config["platform"]
+    if not platforms:
+        p = config.get("platform", "alipay")
+        if isinstance(p, list):
+            platforms = p
+        else:
+            platforms = [p]
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     state = load_state()
@@ -334,9 +470,15 @@ def sync_from_email(config: dict, data_source_id: int = 0):
     status, data = m.search(None, "ALL")
     ids = data[0].split()[-50:] if status == "OK" and data and data[0] else []
 
-    all_rows = []
-    errors = 0
-    error_msg = None
+    # Per-platform result tracking
+    platform_results: dict[str, dict] = {}
+    for plat in platforms:
+        platform_results[plat] = {
+            "rows": [],
+            "errors": 0,
+            "error_message": None,
+            "pending_count": 0,
+        }
 
     for eid in ids:
         eid_s = eid.decode()
@@ -349,104 +491,117 @@ def sync_from_email(config: dict, data_source_id: int = 0):
         msg = email.message_from_bytes(msg_data[0][1])
         subject = decode_mime(msg.get("Subject", ""))
 
-        # Only process matching platform
-        sf = subject_filters.get(platform, "")
-        if sf not in subject:
-            continue
+        # Check which platform(s) this email matches
+        for plat in platforms:
+            sf = subject_filters.get(plat, "")
+            if sf not in subject:
+                continue
 
-        email_dir = batch_dir / eid_s
-        email_dir.mkdir(parents=True, exist_ok=True)
+            email_dir = batch_dir / f"{eid_s}_{plat}"
+            email_dir.mkdir(parents=True, exist_ok=True)
 
-        try:
-            rows = []
-            if platform == "wechat":
-                url = extract_wechat_link(msg)
-                if not url:
-                    raise RuntimeError("No wechat download url found")
-                zip_path = email_dir / "wechat_bill.zip"
-                r = requests.get(url, timeout=60)
-                r.raise_for_status()
-                zip_path.write_bytes(r.content)
-                extracted = unzip_first(zip_path, email_dir / "unzipped", zip_pwd)
-                xlsx = next((p for p in extracted if p.suffix.lower() == ".xlsx"), None)
-                if not xlsx:
-                    raise RuntimeError("No xlsx found in wechat zip")
-                rows = parse_wechat_xlsx(xlsx)
-            elif platform == "alipay":
-                attachment_paths = _save_attachments(msg, email_dir)
-                zip_file = next((p for p in attachment_paths if p.suffix.lower() == ".zip"), None)
-                if not zip_file:
-                    raise RuntimeError("No zip attachment for alipay")
-                extracted = unzip_first(zip_file, email_dir / "unzipped", zip_pwd)
-                csv_file = next((p for p in extracted if p.suffix.lower() == ".csv"), None)
-                if not csv_file:
-                    raise RuntimeError("No csv found in alipay zip")
-                rows = parse_alipay_csv(csv_file)
-            elif platform == "cmb":
-                attachment_paths = _save_attachments(msg, email_dir)
-                zip_file = next((p for p in attachment_paths if p.suffix.lower() == ".zip"), None)
-                if not zip_file:
-                    raise RuntimeError("No zip attachment for cmb")
-                extracted = unzip_first(zip_file, email_dir / "unzipped", zip_pwd)
-                pdf_file = next((p for p in extracted if p.suffix.lower() == ".pdf"), None)
-                if not pdf_file:
-                    raise RuntimeError("No pdf found in cmb zip")
-                out_json = email_dir / "cmb.normalized.json"
-                parse_cmb_pdf(pdf_file, out_json)
-                rows = json.loads(out_json.read_text(encoding="utf-8"))
-            elif platform == "icbc":
-                attachment_paths = _save_attachments(msg, email_dir)
-                pdf_file = next((p for p in attachment_paths if p.suffix.lower() == ".pdf"), None)
-                if not pdf_file:
-                    zip_file = next((p for p in attachment_paths if p.suffix.lower() == ".zip"), None)
-                    if zip_file:
-                        extracted = unzip_first(zip_file, email_dir / "unzipped", zip_pwd)
-                        pdf_file = next((p for p in extracted if p.suffix.lower() == ".pdf"), None)
-                if not pdf_file:
-                    raise RuntimeError("No pdf found for icbc")
-                out_json = email_dir / "icbc.normalized.json"
-                parse_icbc_pdf(pdf_file, out_json)
-                rows = json.loads(out_json.read_text(encoding="utf-8"))
+            try:
+                result = _process_email_for_platform(
+                    plat, msg, eid_s, subject, email_dir, zip_pwd, data_source_id
+                )
+                if result["pending"]:
+                    platform_results[plat]["pending_count"] += 1
+                elif result["rows"]:
+                    insert_transactions(result["rows"], source=f"email_{plat}")
+                    platform_results[plat]["rows"].extend(result["rows"])
+            except Exception as e:
+                platform_results[plat]["errors"] += 1
+                platform_results[plat]["error_message"] = str(e)
+                (email_dir / "error.txt").write_text(str(e), encoding="utf-8")
 
-            if rows:
-                result = insert_transactions(rows, source=f"email_{platform}")
-                all_rows.extend(rows)
-
-            seen.add(eid_s)
-        except Exception as e:
-            errors += 1
-            error_msg = str(e)
-            (email_dir / "error.txt").write_text(str(e), encoding="utf-8")
+        seen.add(eid_s)
 
     m.logout()
 
     state["processed_email_ids"] = sorted(seen, key=lambda x: int(x) if x.isdigit() else 0)
     save_state(state)
 
-    new_count = 0
-    dup_count = 0
-    if all_rows:
-        result = insert_transactions(all_rows, source=f"email_{platform}")
-        new_count = result["new"]
-        dup_count = result["duplicates"]
+    # Build per-platform results
+    results = {}
+    overall_status = "success"
+    has_error = False
+    has_pending = False
+    has_success = False
+    messages = []
+
+    for plat in platforms:
+        pr = platform_results[plat]
+        plat_rows = pr["rows"]
+        new_count = 0
+        dup_count = 0
+        if plat_rows:
+            ins_result = insert_transactions(plat_rows, source=f"email_{plat}")
+            new_count = ins_result["new"]
+            dup_count = ins_result["duplicates"]
+
+        plat_label = subject_filters.get(plat, plat)
+
+        if pr["errors"] > 0 and pr["pending_count"] > 0:
+            plat_status = "partial"
+            has_error = True
+            has_pending = True
+            messages.append(f"{plat_label}部分失败，{pr['pending_count']}个加密文件待输入密码")
+        elif pr["errors"] > 0:
+            plat_status = "error"
+            has_error = True
+            messages.append(f"{plat_label}同步失败: {(pr['error_message'] or '')[:100]}")
+        elif pr["pending_count"] > 0:
+            plat_status = "pending_password"
+            has_pending = True
+            messages.append(f"{plat_label}有{pr['pending_count']}个加密文件待输入密码")
+        else:
+            plat_status = "success"
+            has_success = True
+            messages.append(f"{plat_label}同步成功，新增{new_count}条")
+
+        results[plat] = {
+            "status": plat_status,
+            "records_created": new_count,
+            "records_skipped": dup_count,
+            "pending_count": pr["pending_count"],
+            "error_message": pr["error_message"],
+        }
+
+    # Determine overall status
+    if has_error and (has_success or has_pending):
+        overall_status = "partial"
+    elif has_error:
+        overall_status = "error"
+    elif has_pending and has_success:
+        overall_status = "partial"
+    elif has_pending:
+        overall_status = "pending_password"
+    else:
+        overall_status = "success"
+
+    summary_message = "；".join(messages) if messages else "同步完成"
 
     if data_source_id:
+        total_rows = sum(len(pr["rows"]) for pr in platform_results.values())
+        total_new = sum(r["records_created"] for r in results.values())
+        total_dup = sum(r["records_skipped"] for r in results.values())
+        total_errors = sum(pr["errors"] for pr in platform_results.values())
+        # Store per-platform results as JSON in last_sync_message
+        sync_detail_json = json.dumps(results, ensure_ascii=False)
         write_sync_log(
             data_source_id,
-            "success" if errors == 0 else "partial",
-            len(all_rows),
-            new_count,
-            dup_count,
-            errors,
-            error_msg,
+            overall_status,
+            total_rows,
+            total_new,
+            total_dup,
+            total_errors,
+            sync_detail_json,
         )
 
     return {
-        "total_fetched": len(all_rows),
-        "new_inserted": new_count,
-        "duplicates_skipped": dup_count,
-        "errors": errors,
-        "error_message": error_msg,
+        "status": overall_status,
+        "results": results,
+        "message": summary_message,
     }
 
 
