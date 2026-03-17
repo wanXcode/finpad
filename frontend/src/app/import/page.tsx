@@ -178,7 +178,12 @@ export default function ImportPage() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "text/csv": [".csv"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"], "application/vnd.ms-excel": [".xls"] }, maxFiles: 1, disabled: uploading });
 
   const confirmImport = async () => {
-    if (!preview) return; setImporting(true);
+    if (!preview) return;
+    if (!platform || platform === "unknown") {
+      toast.error("请先选择正确的账单平台（支付宝或微信）再确认导入");
+      return;
+    }
+    setImporting(true);
     try {
       const token = getToken(); const formData = new FormData();
       if (uploadedFile) formData.append("file", uploadedFile); formData.append("platform", platform);

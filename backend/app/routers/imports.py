@@ -18,15 +18,23 @@ PLATFORM_DETECT = {
 
 
 def detect_platform(headers: list[str], content_preview: str) -> str:
-    header_str = ",".join(headers).lower()
-    for h in headers:
-        if "交易号" in h or "商家订单号" in h:
+    normalized_headers = [str(h).replace("\ufeff", "").strip() for h in headers]
+    joined_headers = "|".join(normalized_headers)
+
+    for h in normalized_headers:
+        if "交易号" in h or "商家订单号" in h or "交易创建时间" in h:
             return "alipay"
-        if "微信支付" in h:
+        if "微信支付" in h or "交易单号" in h or "交易类型" in h:
             return "wechat"
-    if "交易号" in content_preview or "支付宝" in content_preview:
+
+    if any(k in joined_headers for k in ["交易号", "商家订单号", "交易创建时间", "支付宝"]):
         return "alipay"
-    if "微信支付" in content_preview:
+    if any(k in joined_headers for k in ["微信支付", "交易单号", "交易类型"]):
+        return "wechat"
+
+    if any(k in content_preview for k in ["交易号", "商家订单号", "交易创建时间", "支付宝"]):
+        return "alipay"
+    if any(k in content_preview for k in ["微信支付", "交易单号", "交易类型"]):
         return "wechat"
     return "unknown"
 
@@ -126,6 +134,9 @@ async def confirm_import(
     platform: str = Form("alipay"),
     user: dict = Depends(get_current_user),
 ):
+    if platform == "unknown":
+        raise HTTPException(400, "未识别账单类型，请先手动选择 支付宝 / 微信 后再确认导入")
+
     content = await file.read()
     filename = file.filename or "unknown"
     db = await get_async_db()
