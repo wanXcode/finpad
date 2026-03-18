@@ -57,9 +57,20 @@ def detect_platform(headers: list[str], content_preview: str) -> str:
     return "unknown"
 
 
+def _decode_csv_bytes(content: bytes) -> str:
+    """Best-effort decode for Chinese bank CSV exports."""
+    for encoding in ("utf-8-sig", "utf-8", "gb18030", "gbk", "gb2312"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return content.decode("utf-8", errors="replace")
+
+
+
 def parse_csv_preview(content: bytes, filename: str):
     """Parse CSV and return preview data"""
-    text = content.decode("utf-8-sig", errors="replace")
+    text = _decode_csv_bytes(content)
     lines = text.strip().split("\n")
 
     # Skip leading comment lines (Alipay CSVs have header comments)
@@ -175,7 +186,7 @@ async def confirm_import(
     try:
         # Parse file
         if filename.lower().endswith(".csv"):
-            text = content.decode("utf-8-sig", errors="replace")
+            text = _decode_csv_bytes(content)
             lines = text.strip().split("\n")
             data_start = 0
             for i, line in enumerate(lines):
@@ -316,13 +327,13 @@ async def _import_bank_csv(db, headers: list, rows: list, platform: str, user_id
                     return i
         return None
 
-    date_col = find_col("记账日期", "交易日期", "日期", "时间")
-    amount_col = find_col("交易金额", "金额", "发生额")
-    income_col = find_col("收入金额", "收入", "贷方金额", "贷方发生额")
-    expense_col = find_col("支出金额", "支出", "借方金额", "借方发生额")
-    balance_col = find_col("余额", "账户余额", "账面余额")
-    summary_col = find_col("摘要", "交易摘要", "用途", "备注")
-    counterparty_col = find_col("对方户名", "对方账户名称", "交易对方", "对方名称", "对方")
+    date_col = find_col("记账日期", "交易日期", "交易日", "入账日期", "日期", "时间")
+    amount_col = find_col("交易金额", "金额", "发生额", "本次发生额")
+    income_col = find_col("收入金额", "收入", "贷方金额", "贷方发生额", "贷方")
+    expense_col = find_col("支出金额", "支出", "借方金额", "借方发生额", "借方")
+    balance_col = find_col("余额", "账户余额", "账面余额", "当前余额")
+    summary_col = find_col("摘要", "交易摘要", "用途", "备注", "附言", "说明")
+    counterparty_col = find_col("对方户名", "对方账户名称", "交易对方", "对方名称", "对方", "对方账号", "对方账户")
     currency_col = find_col("币种", "币别")
 
     if date_col is None:
@@ -349,11 +360,23 @@ async def _import_bank_csv(db, headers: list, rows: list, platform: str, user_id
                 elif exp > 0:
                     amount, direction = exp, "支出"
             elif amount_col is not None and amount_col < len(row):
-                amt_str = str(row[amount_col]).strip().replace(",", "").replace("¥", "")
+                amt_str = str(row[amount_col]).strip().replace(",", "").replace("¥", "").replace("￥", "")
                 if amt_str and amt_str not in ("", "-", "--"):
                     val = float(amt_str)
                     amount = abs(val)
                     direction = "支出" if val < 0 else ("收入" if val > 0 else "不计收支")
+
+            # Fallback for some bank exports that split debit/credit direction into text columns
+            if amount == 0:
+                direction_text = "|".join(str(c).strip() for c in row if c is not None)
+                if amount_col is not None and amount_col < len(row):
+                    amt_str = str(row[amount_col]).strip().replace(",", "").replace("¥", "").replace("￥", "")
+                    if amt_str and amt_str not in ("", "-", "--"):
+                        val = abs(float(amt_str))
+                        if "借" in direction_text or "支出" in direction_text or "付出" in direction_text:
+                            amount, direction = val, "支出"
+                        elif "贷" in direction_text or "收入" in direction_text or "存入" in direction_text:
+                            amount, direction = val, "收入"
 
             if amount == 0:
                 failed += 1

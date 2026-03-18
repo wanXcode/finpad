@@ -181,7 +181,7 @@ export default function ImportPage() {
   const confirmImport = async () => {
     if (!preview) return;
     if (!platform || platform === "unknown") {
-      toast.error("请先选择正确的账单平台（支付宝或微信）再确认导入");
+      toast.error("请先选择正确的账单平台后再确认导入");
       return;
     }
     setImporting(true);
