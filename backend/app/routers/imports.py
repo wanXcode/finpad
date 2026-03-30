@@ -102,7 +102,7 @@ def parse_csv_preview(content: bytes, filename: str):
 
 
 def parse_pdf_preview(content: bytes, filename: str):
-    platform = "cmb" if "cmb" in filename.lower() or "招行" in filename else "icbc" if "icbc" in filename.lower() or "工行" in filename else "unknown"
+    platform = "cmb" if "cmb" in filename.lower() or "招行" in filename else "unknown"
     return {
         "headers": ["PDF账单预览"],
         "preview_rows": [["已识别为PDF文件，请确认平台后导入"]],
@@ -232,6 +232,8 @@ async def confirm_import(
             else:
                 raise HTTPException(400, f"暂不支持 {platform} 格式的Excel导入")
         elif filename.lower().endswith(".pdf"):
+            if platform == "icbc":
+                raise HTTPException(400, "工商银行账单不支持 PDF 导入，请上传表格文件（CSV / Excel）")
             total, created, skipped, failed = await _import_bank_pdf(db, content, filename, platform, user["id"])
         else:
             raise HTTPException(400, "不支持的文件格式")
@@ -327,10 +329,18 @@ async def _import_bank_csv(db, headers: list, rows: list, platform: str, user_id
                     return i
         return None
 
+    def clean_num(val) -> str:
+        s = str(val).strip().replace(",", "").replace("¥", "").replace("￥", "").replace("\u00a0", "")
+        # normalize placeholders commonly used in bank exports
+        if s in ("-", "--", "-.", ".-"):
+            return ""
+        return s
+
     date_col = find_col("记账日期", "交易日期", "交易日", "入账日期", "日期", "时间")
-    amount_col = find_col("交易金额", "金额", "发生额", "本次发生额")
-    income_col = find_col("收入金额", "收入", "贷方金额", "贷方发生额", "贷方")
-    expense_col = find_col("支出金额", "支出", "借方金额", "借方发生额", "借方")
+    # Prefer booked/accounting amount columns over transaction amount columns for bank CSVs
+    amount_col = find_col("记账金额", "交易金额", "金额", "发生额", "本次发生额")
+    income_col = find_col("记账金额(收入)", "收入金额", "收入", "贷方金额", "贷方发生额", "贷方")
+    expense_col = find_col("记账金额(支出)", "支出金额", "支出", "借方金额", "借方发生额", "借方")
     balance_col = find_col("余额", "账户余额", "账面余额", "当前余额")
     summary_col = find_col("摘要", "交易摘要", "用途", "备注", "附言", "说明")
     counterparty_col = find_col("对方户名", "对方账户名称", "交易对方", "对方名称", "对方", "对方账号", "对方账户")
@@ -351,8 +361,8 @@ async def _import_bank_csv(db, headers: list, rows: list, platform: str, user_id
             amount = 0.0
             direction = "不计收支"
             if income_col is not None and expense_col is not None:
-                inc_str = str(row[income_col]).strip().replace(",", "").replace("¥", "") if income_col < len(row) else ""
-                exp_str = str(row[expense_col]).strip().replace(",", "").replace("¥", "") if expense_col < len(row) else ""
+                inc_str = clean_num(row[income_col]) if income_col < len(row) else ""
+                exp_str = clean_num(row[expense_col]) if expense_col < len(row) else ""
                 inc = abs(float(inc_str)) if inc_str and inc_str not in ("", "-", "0", "0.00", "--") else 0
                 exp = abs(float(exp_str)) if exp_str and exp_str not in ("", "-", "0", "0.00", "--") else 0
                 if inc > 0:
@@ -360,7 +370,7 @@ async def _import_bank_csv(db, headers: list, rows: list, platform: str, user_id
                 elif exp > 0:
                     amount, direction = exp, "支出"
             elif amount_col is not None and amount_col < len(row):
-                amt_str = str(row[amount_col]).strip().replace(",", "").replace("¥", "").replace("￥", "")
+                amt_str = clean_num(row[amount_col])
                 if amt_str and amt_str not in ("", "-", "--"):
                     val = float(amt_str)
                     amount = abs(val)
@@ -370,13 +380,28 @@ async def _import_bank_csv(db, headers: list, rows: list, platform: str, user_id
             if amount == 0:
                 direction_text = "|".join(str(c).strip() for c in row if c is not None)
                 if amount_col is not None and amount_col < len(row):
-                    amt_str = str(row[amount_col]).strip().replace(",", "").replace("¥", "").replace("￥", "")
+                    amt_str = clean_num(row[amount_col])
                     if amt_str and amt_str not in ("", "-", "--"):
                         val = abs(float(amt_str))
                         if "借" in direction_text or "支出" in direction_text or "付出" in direction_text:
                             amount, direction = val, "支出"
                         elif "贷" in direction_text or "收入" in direction_text or "存入" in direction_text:
                             amount, direction = val, "收入"
+
+            # ICBC exports often have amount wrapped in parentheses to indicate debit, e.g. (123.45)
+            if amount == 0 and amount_col is not None and amount_col < len(row):
+                raw_amt = str(row[amount_col]).strip()
+                amt_str = clean_num(raw_amt).strip("()")
+                if amt_str and amt_str not in ("", "-", "--"):
+                    val = abs(float(amt_str))
+                    if raw_amt.startswith("(") and raw_amt.endswith(")"):
+                        amount, direction = val, "支出"
+                    elif "借" in "|".join(str(c).strip() for c in row if c is not None):
+                        amount, direction = val, "支出"
+                    elif "贷" in "|".join(str(c).strip() for c in row if c is not None):
+                        amount, direction = val, "收入"
+                    else:
+                        amount, direction = val, "收入" if float(amt_str) > 0 else "支出"
 
             if amount == 0:
                 failed += 1

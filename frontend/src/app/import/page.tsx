@@ -32,7 +32,7 @@ const PLATFORM_OPTIONS = [
   { value: "alipay", label: "支付宝", emoji: "💰" },
   { value: "wechat", label: "微信支付", emoji: "💚" },
   { value: "cmb", label: "招商银行", emoji: "🏦" },
-  { value: "icbc", label: "工商银行", emoji: "🏛️" },
+  { value: "icbc", label: "工商银行（表格）", emoji: "🏛️" },
   { value: "bank", label: "其他银行", emoji: "🏧" },
 ];
 
@@ -438,7 +438,7 @@ export default function ImportPage() {
               <div {...getRootProps()} className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"} ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
                 <input {...getInputProps()} />
                 <div className="flex flex-col items-center gap-3">
-                  {uploading ? (<><div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center animate-pulse"><Upload className="w-6 h-6 text-muted-foreground" /></div><p className="text-sm text-muted-foreground">正在解析文件...</p></>) : (<><div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center"><FileUp className="w-6 h-6 text-muted-foreground" /></div><div><p className="font-medium">拖拽文件到这里，或点击选择</p><p className="text-sm text-muted-foreground mt-1">支持支付宝 CSV、微信 Excel、招行/工行 PDF（.csv / .xlsx / .pdf）</p></div></>)}
+                  {uploading ? (<><div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center animate-pulse"><Upload className="w-6 h-6 text-muted-foreground" /></div><p className="text-sm text-muted-foreground">正在解析文件...</p></>) : (<><div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center"><FileUp className="w-6 h-6 text-muted-foreground" /></div><div><p className="font-medium">拖拽文件到这里，或点击选择</p><p className="text-sm text-muted-foreground mt-1">支持支付宝 CSV、微信 Excel、银行表格文件（.csv / .xlsx / .xls），以及部分银行 PDF</p></div></>)}
                 </div>
               </div>
             </CardContent></Card>
