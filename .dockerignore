@@ -1,0 +1,23 @@
+.git
+.gitignore
+README.md
+VERSION.md
+test-results*.md
+
+# runtime / user data
+data/
+backups/
+backup.sh
+
+# local environments
+backend/venv/
+backend/__pycache__/
+backend/.pytest_cache/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# misc
+**/__pycache__/
+**/.DS_Store
+**/*.log
