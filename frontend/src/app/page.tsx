@@ -173,7 +173,11 @@ export default function DashboardPage() {
                 key={m}
                 size="sm"
                 variant={active ? "default" : "outline"}
-                onClick={() => router.push(m === summary.available_months?.[0] && !month ? "/" : `/?month=${m}`)}
+                onClick={() => {
+                  setLoading(true);
+                  setMonth(m);
+                  router.push(`/?month=${m}`);
+                }}
               >
                 {m}
               </Button>
