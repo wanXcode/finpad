@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, getToken } from "@/lib/api";
 import { AppLayout } from "@/components/app-layout";
@@ -24,9 +24,6 @@ import {
 
 type Summary = {
   total_assets: number;
-  selected_month: string;
-  previous_month: string;
-  available_months: string[];
   this_month: { income: number; expense: number; net: number };
   last_month: { income: number; expense: number };
   transaction_count: number;
@@ -80,31 +77,19 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [trend, setTrend] = useState<TrendMonth[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!getToken()) { router.push("/login"); return; }
-
-    const now = new Date();
-    const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const month = selectedMonth || defaultMonth;
-
-    setLoading(true);
     Promise.all([
-      api<Summary>(`/api/dashboard/summary?month=${month}`),
+      api<Summary>("/api/dashboard/summary"),
       api<{ months: TrendMonth[] }>("/api/dashboard/trend?months=6"),
-      api<{ categories: CategoryItem[] }>(`/api/dashboard/category?month=${month}`),
+      api<{ categories: CategoryItem[] }>("/api/dashboard/category"),
     ])
-      .then(([s, t, c]) => {
-        setSummary(s);
-        setTrend(t.months);
-        setCategories(c.categories);
-        if (!selectedMonth) setSelectedMonth(s.selected_month);
-      })
+      .then(([s, t, c]) => { setSummary(s); setTrend(t.months); setCategories(c.categories); })
       .catch(() => router.push("/login"))
       .finally(() => setLoading(false));
-  }, [router, selectedMonth]);
+  }, [router]);
 
   if (loading) {
     return (
@@ -155,32 +140,9 @@ export default function DashboardPage() {
     name: c.category, value: c.total,
     emoji: CAT_EMOJI[c.category] || "❓",
   }));
-  const monthLabel = useMemo(() => {
-    if (!summary?.selected_month) return "本月";
-    const [y, m] = summary.selected_month.split("-");
-    return `${y}年${Number(m)}月`;
-  }, [summary?.selected_month]);
 
   return (
     <AppLayout title="Dashboard">
-      <div className="flex flex-col gap-2 mb-4">
-        <div>
-          <p className="text-sm text-muted-foreground">当前看板月份</p>
-          <p className="text-base font-medium">{monthLabel}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {summary?.available_months?.map((month) => (
-            <button
-              key={month}
-              type="button"
-              className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${selectedMonth === month ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-input hover:bg-muted"}`}
-              onClick={() => setSelectedMonth(month)}
-            >
-              {month}
-            </button>
-          ))}
-        </div>
-      </div>
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card>
@@ -195,7 +157,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{monthLabel}收入</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">本月收入</CardTitle>
             <TrendingUp className="w-4 h-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -207,7 +169,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{monthLabel}支出</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">本月支出</CardTitle>
             <TrendingDown className="w-4 h-4 text-red-500" />
           </CardHeader>
           <CardContent>
@@ -219,7 +181,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{monthLabel}净结余</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">本月净结余</CardTitle>
             {summary.this_month.net >= 0
               ? <TrendingUp className="w-4 h-4 text-green-500" />
               : <TrendingDown className="w-4 h-4 text-red-500" />}
