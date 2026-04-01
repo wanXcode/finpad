@@ -163,21 +163,22 @@ export default function DashboardPage() {
 
   return (
     <AppLayout title="Dashboard">
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex flex-col gap-2 mb-4">
         <div>
           <p className="text-sm text-muted-foreground">当前看板月份</p>
           <p className="text-base font-medium">{monthLabel}</p>
         </div>
-        <div className="w-[180px]">
-          <select
-            className="flex h-8 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-          >
-            {summary?.available_months?.map((month) => (
-              <option key={month} value={month}>{month}</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap gap-2">
+          {summary?.available_months?.map((month) => (
+            <button
+              key={month}
+              type="button"
+              className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${selectedMonth === month ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-input hover:bg-muted"}`}
+              onClick={() => setSelectedMonth(month)}
+            >
+              {month}
+            </button>
+          ))}
         </div>
       </div>
       {/* KPI Cards */}
