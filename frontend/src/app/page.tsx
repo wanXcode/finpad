@@ -14,13 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from "recharts";
@@ -176,16 +169,15 @@ export default function DashboardPage() {
           <p className="text-base font-medium">{monthLabel}</p>
         </div>
         <div className="w-[180px]">
-          <Select value={selectedMonth} onValueChange={(value) => setSelectedMonth(value || "")}>
-            <SelectTrigger>
-              <SelectValue placeholder="选择月份" />
-            </SelectTrigger>
-            <SelectContent>
-              {summary?.available_months?.map((month) => (
-                <SelectItem key={month} value={month}>{month}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <select
+            className="flex h-8 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          >
+            {summary?.available_months?.map((month) => (
+              <option key={month} value={month}>{month}</option>
+            ))}
+          </select>
         </div>
       </div>
       {/* KPI Cards */}
