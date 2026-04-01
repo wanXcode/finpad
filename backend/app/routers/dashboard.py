@@ -5,37 +5,66 @@ from app.database import get_async_db
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
+def _shift_month(month: str, delta: int) -> str:
+    year, mon = month.split("-")
+    y = int(year)
+    m = int(mon) + delta
+    while m <= 0:
+        y -= 1
+        m += 12
+    while m > 12:
+        y += 1
+        m -= 12
+    return f"{y:04d}-{m:02d}"
+
+
 @router.get("/summary")
-async def get_summary(user: dict = Depends(get_current_user)):
+async def get_summary(month: str | None = Query(None), user: dict = Depends(get_current_user)):
     db = await get_async_db()
     try:
         uid = user["id"]
+
+        cursor = await db.execute(
+            "SELECT COALESCE(?, strftime('%Y-%m', 'now', 'localtime')) as target_month",
+            (month,),
+        )
+        target_month = (await cursor.fetchone())["target_month"]
+        prev_month = _shift_month(target_month, -1)
 
         # Total assets
         cursor = await db.execute("SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE user_id = ?", (uid,))
         total_assets = (await cursor.fetchone())["total"]
 
-        # This month income/expense
+        # Selected month income/expense
         cursor = await db.execute("""
             SELECT
                 COALESCE(SUM(CASE WHEN direction='收入' THEN amount ELSE 0 END), 0) as income,
                 COALESCE(SUM(CASE WHEN direction='支出' THEN amount ELSE 0 END), 0) as expense
             FROM transactions
-            WHERE user_id = ? AND strftime('%Y-%m', tx_time) = strftime('%Y-%m', 'now')
-        """, (uid,))
+            WHERE user_id = ? AND strftime('%Y-%m', tx_time) = ?
+        """, (uid, target_month))
         row = await cursor.fetchone()
         income = row["income"]
         expense = row["expense"]
 
-        # Last month for comparison
+        # Previous month for comparison
         cursor = await db.execute("""
             SELECT
                 COALESCE(SUM(CASE WHEN direction='收入' THEN amount ELSE 0 END), 0) as income,
                 COALESCE(SUM(CASE WHEN direction='支出' THEN amount ELSE 0 END), 0) as expense
             FROM transactions
-            WHERE user_id = ? AND strftime('%Y-%m', tx_time) = strftime('%Y-%m', 'now', '-1 month')
-        """, (uid,))
+            WHERE user_id = ? AND strftime('%Y-%m', tx_time) = ?
+        """, (uid, prev_month))
         last = await cursor.fetchone()
+
+        # Available months with data
+        cursor = await db.execute("""
+            SELECT DISTINCT strftime('%Y-%m', tx_time) as month
+            FROM transactions
+            WHERE user_id = ?
+            ORDER BY month DESC
+        """, (uid,))
+        available_months = [r["month"] for r in await cursor.fetchall() if r["month"]]
 
         # Recent transactions
         cursor = await db.execute("""
@@ -51,14 +80,17 @@ async def get_summary(user: dict = Depends(get_current_user)):
 
         return {
             "total_assets": round(total_assets, 2),
+            "selected_month": target_month,
+            "previous_month": prev_month,
+            "available_months": available_months,
             "this_month": {
-                "income": round(income, 2),
-                "expense": round(expense, 2),
-                "net": round(income - expense, 2),
+                "income": round(income or 0, 2),
+                "expense": round(expense or 0, 2),
+                "net": round((income or 0) - (expense or 0), 2),
             },
             "last_month": {
-                "income": round(last["income"], 2),
-                "expense": round(last["expense"], 2),
+                "income": round(last["income"] or 0, 2),
+                "expense": round(last["expense"] or 0, 2),
             },
             "transaction_count": tx_count,
             "recent_transactions": recent,
