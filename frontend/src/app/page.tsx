@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, getToken } from "@/lib/api";
 import { AppLayout } from "@/components/app-layout";
@@ -155,12 +155,11 @@ export default function DashboardPage() {
     emoji: CAT_EMOJI[c.category] || "❓",
   }));
   const selectedMonth = summary?.selected_month || month || "本月";
-  const monthLabel = useMemo(() => {
-    if (!selectedMonth || selectedMonth === "本月") return "本月";
+  let monthLabel = "本月";
+  if (selectedMonth && selectedMonth !== "本月") {
     const [y, m] = selectedMonth.split("-");
-    if (!y || !m) return selectedMonth;
-    return `${y}年${Number(m)}月`;
-  }, [selectedMonth]);
+    monthLabel = y && m ? `${y}年${Number(m)}月` : selectedMonth;
+  }
 
   return (
     <AppLayout title="Dashboard">
