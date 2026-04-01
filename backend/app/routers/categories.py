@@ -4,6 +4,7 @@ from typing import Optional
 from app.auth import get_current_user
 from app.database import get_async_db
 from app.bank_categorizer import categorize_bank_transaction
+from app.ai_categorizer import classify_bank_transaction_ai
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -107,6 +108,7 @@ async def reclassify_bank_transactions(user: dict = Depends(get_current_user)):
         rows = await cursor.fetchall()
 
         updated = 0
+        ai_updated = 0
         for row in rows:
             note = row["note"] or ""
             summary = note.split(" | ")[0] if note else ""
@@ -116,6 +118,18 @@ async def reclassify_bank_transactions(user: dict = Depends(get_current_user)):
                 note=note,
                 direction=row["direction"] or "",
             )
+
+            if category == "其他":
+                ai_result = await classify_bank_transaction_ai(
+                    summary=summary,
+                    counterparty=row["counterparty"] or "",
+                    note=note,
+                    direction=row["direction"] or "",
+                )
+                if ai_result.get("confidence", 0) >= 0.6 and ai_result.get("category") not in (None, "", "其他"):
+                    category = ai_result["category"]
+                    ai_updated += 1
+
             await db.execute(
                 "UPDATE transactions SET category = ? WHERE id = ? AND user_id = ?",
                 (category, row["id"], user["id"]),
@@ -123,6 +137,6 @@ async def reclassify_bank_transactions(user: dict = Depends(get_current_user)):
             updated += 1
 
         await db.commit()
-        return {"message": "银行卡流水重分类完成", "updated": updated}
+        return {"message": "银行卡流水重分类完成", "updated": updated, "ai_updated": ai_updated}
     finally:
         await db.close()
