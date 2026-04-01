@@ -57,14 +57,12 @@ async def get_summary(month: str | None = Query(None), user: dict = Depends(get_
         """, (uid, prev_month))
         last = await cursor.fetchone()
 
-        # Available months with data
-        cursor = await db.execute("""
-            SELECT DISTINCT strftime('%Y-%m', tx_time) as month
-            FROM transactions
-            WHERE user_id = ?
-            ORDER BY month DESC
-        """, (uid,))
-        available_months = [r["month"] for r in await cursor.fetchall() if r["month"]]
+        # Fixed recent month options: current month + previous two months
+        available_months = [
+            target_month,
+            _shift_month(target_month, -1),
+            _shift_month(target_month, -2),
+        ]
 
         # Recent transactions
         cursor = await db.execute("""
