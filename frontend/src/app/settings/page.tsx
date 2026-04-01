@@ -100,6 +100,7 @@ export default function SettingsPage() {
   const [accPlatform, setAccPlatform] = useState("支付宝");
   const [accType, setAccType] = useState("ewallet");
   const [accBalance, setAccBalance] = useState(0);
+  const [reclassifyingBank, setReclassifyingBank] = useState(false);
 
   useEffect(() => {
     if (!getToken()) {
@@ -210,6 +211,20 @@ export default function SettingsPage() {
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "更新失败");
+    }
+  };
+
+  const handleReclassifyBank = async () => {
+    setReclassifyingBank(true);
+    try {
+      const res = await api<{ message: string; updated: number; ai_updated?: number }>("/api/categories/reclassify-bank", {
+        method: "POST",
+      });
+      toast.success(`${res.message}：${res.updated} 条，AI 兜底 ${res.ai_updated || 0} 条`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "银行卡重分类失败");
+    } finally {
+      setReclassifyingBank(false);
     }
   };
 
@@ -451,10 +466,17 @@ export default function SettingsPage() {
         <TabsContent value="categories" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">分类映射规则</CardTitle>
-              <CardDescription>
-                将各平台原始分类映射到统一分类。新平台分类首次出现时默认归为&ldquo;其他&rdquo;，可在此处修改。
-              </CardDescription>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base">分类映射规则</CardTitle>
+                  <CardDescription>
+                    将各平台原始分类映射到统一分类。新平台分类首次出现时默认归为&ldquo;其他&rdquo;，可在此处修改。
+                  </CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={handleReclassifyBank} disabled={reclassifyingBank}>
+                  {reclassifyingBank ? "重分类中..." : "重分类银行卡流水"}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {mappings.length === 0 ? (
