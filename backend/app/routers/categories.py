@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.auth import get_current_user
 from app.database import get_async_db
+from app.bank_categorizer import categorize_bank_transaction
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -86,5 +87,42 @@ async def update_mapping(mapping_id: int, req: MappingUpdate, user: dict = Depen
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="映射规则不存在")
         return {"message": "更新成功"}
+    finally:
+        await db.close()
+
+
+@router.post("/reclassify-bank")
+async def reclassify_bank_transactions(user: dict = Depends(get_current_user)):
+    db = await get_async_db()
+    try:
+        cursor = await db.execute(
+            """
+            SELECT id, direction, counterparty, note
+            FROM transactions
+            WHERE user_id = ? AND platform IN ('工商银行', '招商银行', '银行')
+              AND original_category = '银行卡流水'
+            """,
+            (user["id"],),
+        )
+        rows = await cursor.fetchall()
+
+        updated = 0
+        for row in rows:
+            note = row["note"] or ""
+            summary = note.split(" | ")[0] if note else ""
+            category = categorize_bank_transaction(
+                summary=summary,
+                counterparty=row["counterparty"] or "",
+                note=note,
+                direction=row["direction"] or "",
+            )
+            await db.execute(
+                "UPDATE transactions SET category = ? WHERE id = ? AND user_id = ?",
+                (category, row["id"], user["id"]),
+            )
+            updated += 1
+
+        await db.commit()
+        return {"message": "银行卡流水重分类完成", "updated": updated}
     finally:
         await db.close()

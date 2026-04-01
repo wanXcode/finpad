@@ -1,5 +1,28 @@
 # FinPad Version History
 
+## v0.3.1 — 2026-04-01
+
+### Bank Import Stabilization & Dashboard Month Switch
+
+**新功能**
+- 首页 Dashboard 支持固定最近三个月切换（本月 / 上月 / 上上月）
+- 银行流水导入新增规则分类：不再统一落到“银行卡流水”
+- 新增历史银行卡流水重分类入口：`POST /api/categories/reclassify-bank`
+
+**修复**
+- 修复工行 CSV 前置说明行导致表头误判的问题
+- 修复工行 CSV 对 `记账金额(收入)/(支出)` 的兼容
+- 修复银行 CSV 中文编码兼容（`gb18030/gbk`）
+- 修复 Dashboard 月份切换时内容不刷新的问题
+- 修复 Dashboard 前端 Hook 顺序错误导致的 client-side exception
+- 移除前端对 Google Fonts 在线拉取的依赖，避免线上构建失败
+
+**说明**
+- 当前银行分类采用“规则优先”方案，AI 补分类留待后续增强
+- Dashboard 月份按钮固定锚定到真实当前月，不随已选月份滚动
+
+---
+
 ## v0.3.0 — 2026-03-16
 
 ### Multi-User System & Database Encryption

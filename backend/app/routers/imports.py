@@ -11,6 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from app.auth import get_current_user
 from app.database import get_async_db
+from app.bank_categorizer import categorize_bank_transaction
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -463,11 +464,12 @@ async def _import_bank_csv(db, headers: list, rows: list, platform: str, user_id
 
             note_parts = [s for s in [summary, f"余额:{balance}" if balance else ""] if s]
             note = " | ".join(note_parts)
+            category = categorize_bank_transaction(summary=summary, counterparty=counterparty, note=note, direction=direction)
 
             await db.execute(
                 """INSERT INTO transactions (user_id, tx_id, tx_time, platform, account, direction, amount, category, original_category, counterparty, note, source)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual_upload')""",
-                (user_id, tx_id, date_val, platform_label, platform_label, direction, amount, "银行卡流水", "银行卡流水", counterparty, note),
+                (user_id, tx_id, date_val, platform_label, platform_label, direction, amount, category, "银行卡流水", counterparty, note),
             )
             created += 1
         except Exception:
