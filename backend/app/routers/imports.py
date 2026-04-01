@@ -44,6 +44,9 @@ def detect_platform(headers: list[str], content_preview: str) -> str:
             return "icbc"
         if any(k in joined_headers or k in content_preview for k in ["招商银行", "招行"]):
             return "cmb"
+        inferred_bank = _detect_bank_platform_from_headers(normalized_headers)
+        if inferred_bank:
+            return inferred_bank
         return "bank"
 
     if any(k in content_preview for k in ["交易号", "商家订单号", "交易创建时间", "支付宝"]):
@@ -54,6 +57,10 @@ def detect_platform(headers: list[str], content_preview: str) -> str:
         return "cmb"
     if any(k in content_preview for k in ["工商银行"]):
         return "icbc"
+
+    inferred_bank = _detect_bank_platform_from_headers(normalized_headers)
+    if inferred_bank:
+        return inferred_bank
     return "unknown"
 
 
@@ -68,20 +75,57 @@ def _decode_csv_bytes(content: bytes) -> str:
 
 
 
+def _find_csv_header_start(lines: list[str]) -> int:
+    """Find the real header row in CSV exports with leading metadata lines."""
+    best_idx = 0
+    best_score = -1
+
+    header_keywords = [
+        "交易日期", "记账日期", "入账日期", "日期", "摘要", "交易摘要", "交易详情",
+        "交易金额", "记账金额", "收入", "支出", "余额", "对方户名", "对方账户", "币种",
+        "交易号", "商家订单号", "交易创建时间", "微信支付", "交易单号", "交易类型",
+    ]
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+            continue
+        if "," not in stripped and "\t" not in stripped:
+            continue
+
+        cols = [c.strip().replace("\ufeff", "") for c in next(csv.reader([line]))]
+        non_empty = [c for c in cols if c]
+        if len(non_empty) < 3:
+            continue
+
+        joined = "|".join(non_empty)
+        keyword_score = sum(1 for k in header_keywords if k in joined)
+        looks_like_meta = any(token in joined for token in ["卡号:", "卡别名", "子账户序号", "子账户类别", "子账户别名"])
+        score = keyword_score * 10 + len(non_empty) - (50 if looks_like_meta else 0)
+
+        if score > best_score:
+            best_score = score
+            best_idx = i
+
+    return best_idx
+
+
+def _detect_bank_platform_from_headers(headers: list[str]) -> str | None:
+    joined_headers = "|".join(str(h).replace("\ufeff", "").strip() for h in headers)
+
+    if "记账金额(收入)" in joined_headers and "记账金额(支出)" in joined_headers:
+        return "icbc"
+    if "招商银行" in joined_headers:
+        return "cmb"
+    return None
+
+
 def parse_csv_preview(content: bytes, filename: str):
     """Parse CSV and return preview data"""
     text = _decode_csv_bytes(content)
     lines = text.strip().split("\n")
 
-    # Skip leading comment lines (Alipay CSVs have header comments)
-    data_start = 0
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and not stripped.startswith("-"):
-            # Check if this looks like a header row
-            if "," in stripped or "\t" in stripped:
-                data_start = i
-                break
+    data_start = _find_csv_header_start(lines)
 
     reader = csv.reader(lines[data_start:])
     rows = list(reader)
@@ -188,13 +232,7 @@ async def confirm_import(
         if filename.lower().endswith(".csv"):
             text = _decode_csv_bytes(content)
             lines = text.strip().split("\n")
-            data_start = 0
-            for i, line in enumerate(lines):
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#") and not stripped.startswith("-"):
-                    if "," in stripped:
-                        data_start = i
-                        break
+            data_start = _find_csv_header_start(lines)
             reader = csv.reader(lines[data_start:])
             rows = list(reader)
             headers = [h.strip() for h in rows[0]]
